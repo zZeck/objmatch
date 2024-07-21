@@ -7,120 +7,105 @@
 
 */
 
-#include <stdlib.h>
-#include <stdio.h>
+#include <cstdio>
+#include <cstdlib>
 
 #include "n64sym.h"
 
-int main(int argc, const char* argv[])
-{
-    CN64Sym n64sym;
-    const char* binPath;
+auto main(int argc, const char* argv[]) -> int {
+  CN64Sym n64sym;
+  const char* binPath = nullptr;
 
-    if(argc < 2)
-    {
-        printf (
-            "n64sym - N64 symbol identification tool (https://github.com/shygoo/n64sym)\n\n"
-            "  Usage: n64sym <binary path> [options]\n\n"
-            "  Options:\n"
-            "    -s                         scan for symbols from built-in signature file\n"
-            "    -l <sig/lib/obj path>      scan for symbols from signature/library/object file(s)\n"
-            "    -f <format>                set the output format (pj64, nemu, armips, n64split, splat, default)\n"
-            "    -o <output path>           set the output path\n"
-            "    -h <headersize>            set the headersize (default: 0x80000000)\n"
-            "    -t                         scan thoroughly\n"
-            "    -v                         enable verbose logging\n"
-        );
-        
+  if (argc < 2) {
+    printf(
+        "n64sym - N64 symbol identification tool (https://github.com/shygoo/n64sym)\n\n"
+        "  Usage: n64sym <binary path> [options]\n\n"
+        "  Options:\n"
+        "    -s                         scan for symbols from built-in signature file\n"
+        "    -l <sig/lib/obj path>      scan for symbols from signature/library/object file(s)\n"
+        "    -f <format>                set the output format (pj64, nemu, armips, n64split, splat, default)\n"
+        "    -o <output path>           set the output path\n"
+        "    -h <headersize>            set the headersize (default: 0x80000000)\n"
+        "    -t                         scan thoroughly\n"
+        "    -v                         enable verbose logging\n");
+
+    return EXIT_FAILURE;
+  }
+
+  binPath = argv[1];
+
+  if (!n64sym.LoadBinary(binPath)) {
+    printf("Error: Failed to load '%s'\n", binPath);
+    return EXIT_FAILURE;
+  }
+
+  for (int argi = 2; argi < argc; argi++) {
+    if (argv[argi][0] != '-') {
+      printf("Error: Unexpected '%s' in command line\n", argv[argi]);
+      return EXIT_FAILURE;
+    }
+
+    if (strlen(&argv[argi][1]) != 1) {
+      printf("Error: Invalid switch '%s'\n", argv[argi]);
+      return EXIT_FAILURE;
+    }
+
+    switch (argv[argi][1]) {
+      case 'l':
+        if (argi + 1 >= argc) {
+          printf("Error: No path specified for '-l'\n");
+        }
+        n64sym.AddLibPath(argv[argi + 1]);
+        argi++;
+        break;
+      case 's':
+        n64sym.UseBuiltinSignatures(true);
+        break;
+      case 't':
+        n64sym.SetThoroughScan(true);
+        break;
+      case 'v':
+        n64sym.SetVerbose(true);
+        break;
+      case 'f':
+        if (argi + 1 >= argc) {
+          printf("Error: No output format specified for '-f'\n");
+          return EXIT_FAILURE;
+        }
+        if (!n64sym.SetOutputFormat(argv[argi + 1])) {
+          printf("Error: Invalid output format '%s'\n", argv[argi + 1]);
+          return EXIT_FAILURE;
+        }
+        argi++;
+        break;
+      case 'h':
+        if (argi + 1 >= argc) {
+          printf("Error: No header size specified for '-h'\n");
+          return EXIT_FAILURE;
+        }
+        n64sym.SetHeaderSize(strtoul(argv[argi + 1], nullptr, 0));
+        argi++;
+        break;
+      case 'o':
+        if (argi + 1 >= argc) {
+          printf("Error: No path specified for '-o'\n");
+          return EXIT_FAILURE;
+        }
+        if (!n64sym.SetOutputPath(argv[argi + 1])) {
+          printf("Error: Could not open '%s'\n", argv[argi + 1]);
+          return EXIT_FAILURE;
+        }
+        argi++;
+        break;
+      default:
+        printf("Error: Invalid switch '%s'\n", argv[argi]);
         return EXIT_FAILURE;
     }
+  }
 
-    binPath = argv[1];
+  if (!n64sym.Run()) {
+    return EXIT_FAILURE;
+  }
 
-    if(!n64sym.LoadBinary(binPath))
-    {
-        printf("Error: Failed to load '%s'\n", binPath);
-        return EXIT_FAILURE;
-    }
-    
-    for(int argi = 2; argi < argc; argi++)
-    {
-        if(argv[argi][0] != '-')
-        {
-            printf("Error: Unexpected '%s' in command line\n", argv[argi]);
-            return EXIT_FAILURE;
-        }
-        
-        if(strlen(&argv[argi][1]) != 1)
-        {
-            printf("Error: Invalid switch '%s'\n", argv[argi]);
-            return EXIT_FAILURE;
-        }
-
-        switch(argv[argi][1])
-        {
-        case 'l':
-            if(argi+1 >= argc)
-            {
-                printf("Error: No path specified for '-l'\n");
-            }
-            n64sym.AddLibPath(argv[argi+1]);
-            argi++;
-            break;
-        case 's':
-            n64sym.UseBuiltinSignatures(true);
-            break;
-        case 't':
-            n64sym.SetThoroughScan(true);
-            break;
-        case 'v':
-            n64sym.SetVerbose(true);
-            break;
-        case 'f':
-            if(argi+1 >= argc)
-            {
-                printf("Error: No output format specified for '-f'\n");
-                return EXIT_FAILURE;
-            }
-            if(!n64sym.SetOutputFormat(argv[argi+1]))
-            {
-                printf("Error: Invalid output format '%s'\n", argv[argi+1]);
-                return EXIT_FAILURE;
-            }
-            argi++;
-            break;
-        case 'h':
-            if(argi+1 >= argc)
-            {
-                printf("Error: No header size specified for '-h'\n");
-                return EXIT_FAILURE;
-            }
-            n64sym.SetHeaderSize(strtoul(argv[argi+1], NULL, 0));
-            argi++;
-            break;
-        case 'o':
-            if(argi+1 >= argc)
-            {
-                printf("Error: No path specified for '-o'\n");
-                return EXIT_FAILURE;
-            }
-            if(!n64sym.SetOutputPath(argv[argi+1]))
-            {
-                printf("Error: Could not open '%s'\n", argv[argi+1]);
-                return EXIT_FAILURE;
-            }
-            argi++;
-            break;
-        default:
-            printf("Error: Invalid switch '%s'\n", argv[argi]);
-            return EXIT_FAILURE;
-        }
-    }
-
-    if(!n64sym.Run())
-    {
-        return EXIT_FAILURE;
-    }
-
-    return EXIT_SUCCESS;
+  return EXIT_SUCCESS;
 }

@@ -4,3 +4,5 @@ test
 oslibs
 .vscode
 build
+out
+*.yaml

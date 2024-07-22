@@ -25,7 +25,7 @@
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #endif
 
-CN64Sig::CN64Sig()  {}
+CN64Sig::CN64Sig()  = default;
 
 CN64Sig::~CN64Sig() = default;
 

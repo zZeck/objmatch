@@ -19,6 +19,7 @@ Checks:
   - '-hicpp-signed-bitwise'
   - '-llvm-header-guard'
   - '-fuchsia-default-arguments-calls'
+  - '-fuchsia-default-arguments-declarations'
   - '-abseil-*'
   - '-altera-*'
   - '-boost-*'

@@ -199,8 +199,8 @@ class CElfSymbol {
   [[nodiscard]] auto Other() const -> uint8_t const { return st_other; }
   [[nodiscard]] auto SectionIndex() const -> uint16_t const { return bswap16(st_shndx); }
 
-  auto Type() const -> uint8_t { return static_cast<uint8_t>(Info() & 0x0F); }
-  auto Binding() const -> uint8_t { return static_cast<uint8_t>(Info() >> 4); }
+  [[nodiscard]] auto Type() const -> uint8_t { return static_cast<uint8_t>(Info() & 0x0F); }
+  [[nodiscard]] auto Binding() const -> uint8_t { return static_cast<uint8_t>(Info() >> 4); }
   auto Name(CElfContext* elf) const -> const char*;
   auto Section(CElfContext* elf) const -> const CElfSection*;
 };
@@ -212,10 +212,10 @@ class CElfRelocation {
  public:
   [[nodiscard]] auto Offset() const -> uint32_t const { return bswap32(r_offset); }
   [[nodiscard]] auto Info() const -> uint32_t const { return bswap32(r_info); }
-  auto SymbolIndex() const -> uint32_t { return Info() >> 8; }
-  auto Type() const -> uint8_t { return static_cast<uint8_t>(Info() & 0x0F); }
+  [[nodiscard]] auto SymbolIndex() const -> uint32_t { return Info() >> 8; }
+  [[nodiscard]] auto Type() const -> uint8_t { return static_cast<uint8_t>(Info() & 0x0F); }
 
-  auto Symbol(CElfContext* elf) -> CElfSymbol*;
+  auto Symbol(CElfContext* elf) const -> CElfSymbol*;
 };
 
 #endif  // ELFUTIL_H

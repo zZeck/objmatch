@@ -170,4 +170,4 @@ auto CElfSymbol::Section(CElfContext* elf) const -> const CElfSection* { return 
 
 //////////////
 
-auto CElfRelocation::Symbol(CElfContext* elf) -> CElfSymbol* { return elf->Symbol(SymbolIndex()); }
+auto CElfRelocation::Symbol(CElfContext* elf) const -> CElfSymbol* { return elf->Symbol(SymbolIndex()); }

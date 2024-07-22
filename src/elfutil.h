@@ -41,70 +41,48 @@
 #endif
 
 enum {
-EI_MAG0 = 0,
-EI_MAG1 = 1,
-EI_MAG2 = 2,
-EI_MAG3 = 3,
-EI_CLASS = 4,
-EI_DATA = 5,
-EI_VERSION = 6,
-EI_OSABI = 7,
-EI_ABIVERSION = 8,
-EI_PAD = 7,
-EI_NIDENT = 16
+  EI_MAG0 = 0,
+  EI_MAG1 = 1,
+  EI_MAG2 = 2,
+  EI_MAG3 = 3,
+  EI_CLASS = 4,
+  EI_DATA = 5,
+  EI_VERSION = 6,
+  EI_OSABI = 7,
+  EI_ABIVERSION = 8,
+  EI_PAD = 7,
+  EI_NIDENT = 16
 };
 
 enum {
-ELFCLASSNONE = 0,  // Invalid class
-ELFCLASS32 = 1,    // 32-bit objects
-ELFCLASS64 = 2    // 64-bit objects
+  ELFCLASSNONE = 0,  // Invalid class
+  ELFCLASS32 = 1,    // 32-bit objects
+  ELFCLASS64 = 2     // 64-bit objects
 };
 
 // mips relocation types
 enum {
-R_MIPS_NONE = 0,
-R_MIPS_16 = 1,
-R_MIPS_32 = 2,
-R_MIPS_REL32 = 3,
-R_MIPS_26 = 4,
-R_MIPS_HI16 = 5,
-R_MIPS_LO16 = 6,
-R_MIPS_GPREL16 = 7,
-R_MIPS_LITERAL = 8,
-R_MIPS_GOT16 = 9,
-R_MIPS_CALL16 = 21
+  R_MIPS_NONE = 0,
+  R_MIPS_16 = 1,
+  R_MIPS_32 = 2,
+  R_MIPS_REL32 = 3,
+  R_MIPS_26 = 4,
+  R_MIPS_HI16 = 5,
+  R_MIPS_LO16 = 6,
+  R_MIPS_GPREL16 = 7,
+  R_MIPS_LITERAL = 8,
+  R_MIPS_GOT16 = 9,
+  R_MIPS_CALL16 = 21
 };
 
 // special section numbers
-enum {
-SHN_UNDEF = 0x0000,
-SHN_LORESERVE = 0xFF00,
-SHN_LOPROC = 0xFF00,
-SHN_HIPROC = 0xFF1F,
-SHN_ABS = 0xFFF1,
-SHN_COMMON = 0xFFF2,
-SHN_HIRESERVE = 0xFFFF
-};
+enum { SHN_UNDEF = 0x0000, SHN_LORESERVE = 0xFF00, SHN_LOPROC = 0xFF00, SHN_HIPROC = 0xFF1F, SHN_ABS = 0xFFF1, SHN_COMMON = 0xFFF2, SHN_HIRESERVE = 0xFFFF };
 
 // symbol bindings
-enum {
-STB_LOCAL = 0,
-STB_GLOBAL = 1,
-STB_WEAK = 2,
-STB_LOPROC = 13,
-STB_HIPROC = 15
-};
+enum { STB_LOCAL = 0, STB_GLOBAL = 1, STB_WEAK = 2, STB_LOPROC = 13, STB_HIPROC = 15 };
 
 // symbol types
-enum {
-STT_NOTYPE = 0,
-STT_OBJECT = 1,
-STT_FUNC = 2,
-STT_SECTION = 3,
-STT_FILE = 4,
-STT_LOPROC = 13,
-STT_HIPROC = 15
-};
+enum { STT_NOTYPE = 0, STT_OBJECT = 1, STT_FUNC = 2, STT_SECTION = 3, STT_FILE = 4, STT_LOPROC = 13, STT_HIPROC = 15 };
 
 class CElfContext;
 class CElfHeader;
@@ -149,7 +127,7 @@ class CElfContext {
   auto NumSections() -> uint16_t { return bswap16(Header()->e_shnum); }
   auto SectionNamesIndex() -> uint16_t { return bswap16(Header()->e_shstrndx); }
 
- [[nodiscard]] auto Size() const -> size_t const { return m_Size; }
+  [[nodiscard]] auto Size() const -> size_t const { return m_Size; }
 
   auto Section(int index) -> CElfSection*;
   auto Section(const char* name) -> CElfSection*;

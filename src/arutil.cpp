@@ -15,7 +15,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-
 #include <fstream>
 
 auto CArReader::ArTrimIdentifier(char* str) -> char* {
@@ -29,13 +28,9 @@ auto CArReader::ArTrimIdentifier(char* str) -> char* {
   return org;
 }
 
-CArReader::CArReader()  = default;
+CArReader::CArReader() = default;
 
-CArReader::~CArReader() {
-  
-    delete[] m_Buffer;
-  
-}
+CArReader::~CArReader() { delete[] m_Buffer; }
 
 auto CArReader::Load(const char* path) -> bool {
   if (m_Buffer != nullptr) {
@@ -115,7 +110,7 @@ auto CArReader::SeekNextBlock() -> bool {
   return true;
 }
 
-auto CArReader::GetBlockIdentifier() -> const char* const  { return m_CurRealIdentifier; }
+auto CArReader::GetBlockIdentifier() -> const char* const { return m_CurRealIdentifier; }
 
 auto CArReader::GetBlockData() -> uint8_t* { return m_CurBlock; }
 

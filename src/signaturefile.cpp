@@ -23,13 +23,11 @@
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #endif
 
-CSignatureFile::CSignatureFile()  = default;
+CSignatureFile::CSignatureFile() = default;
 
 CSignatureFile::~CSignatureFile() {
   for (auto symbol : m_Symbols) {
-    
-      delete symbol.relocs;
-    
+    delete symbol.relocs;
   }
 
   delete[] m_Buffer;

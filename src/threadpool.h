@@ -13,7 +13,7 @@
 
 class CThreadPool {
  public:
-  using worker_routine_t = void *(*)(void *);
+  using worker_routine_t = void* (*)(void*);
 
  private:
   using worker_context_t = struct {

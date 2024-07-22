@@ -17,9 +17,7 @@
 #include <cstdlib>
 
 #define AR_FILE_SIG "!<arch>\n"
-enum {
-AR_FILE_SIG_LEN = 8
-};
+enum { AR_FILE_SIG_LEN = 8 };
 
 class CArReader {
   using ar_header_t = struct {

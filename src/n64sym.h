@@ -10,10 +10,9 @@
 #ifndef N64SYM_H
 #define N64SYM_H
 
+#include <algorithm>
 #include <cstdarg>
 #include <cstdlib>
-
-#include <algorithm>
 #include <fstream>
 #include <set>
 #include <vector>

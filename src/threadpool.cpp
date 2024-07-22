@@ -22,7 +22,7 @@
 
 CThreadPool::CThreadPool() : m_NumWorkers(GetNumCPUCores()) {
   m_DefaultMutex = PTHREAD_MUTEX_INITIALIZER;
-  
+
   m_Workers = new worker_context_t[m_NumWorkers];
   memset(m_Workers, 0, sizeof(worker_context_t) * m_NumWorkers);
 }

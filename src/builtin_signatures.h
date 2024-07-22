@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 
-
 extern const char gBuiltinSignatureFile[];
 
 #endif  // BUILTIN_SIGNATURES_H

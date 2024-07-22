@@ -25,7 +25,7 @@
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #endif
 
-CN64Sig::CN64Sig()  = default;
+CN64Sig::CN64Sig() = default;
 
 CN64Sig::~CN64Sig() = default;
 
@@ -51,7 +51,7 @@ auto stricmp(const char *a, const char *b) -> int {
   return 0;
 }
 
-auto strPastUnderscores(const char *s) -> const char * const{
+auto strPastUnderscores(const char *s) -> const char *const {
   while (*s == '_') {
     s++;
   }
@@ -77,7 +77,7 @@ auto CN64Sig::Run() -> bool {
   std::vector<symbol_entry_t> symbols;
 
   symbols.reserve(m_SymbolMap.size());
-for (auto &i : m_SymbolMap) {
+  for (auto &i : m_SymbolMap) {
     symbols.push_back(i.second);
   }
 
@@ -156,7 +156,7 @@ for (auto &i : m_SymbolMap) {
   return true;
 }
 
-auto CN64Sig::GetRelTypeName(uint8_t relType) -> const char * const {
+auto CN64Sig::GetRelTypeName(uint8_t relType) -> const char *const {
   switch (relType) {
     case R_MIPS_26:
       return "targ26";

@@ -29,18 +29,9 @@
 CN64Sym::n64sym_fmt_lut_t CN64Sym::FormatNames[] = {{"default", N64SYM_FMT_DEFAULT}, {"pj64", N64SYM_FMT_PJ64},         {"nemu", N64SYM_FMT_NEMU},
                                                     {"armips", N64SYM_FMT_ARMIPS},   {"n64split", N64SYM_FMT_N64SPLIT}, {"splat", N64SYM_FMT_SPLAT}};
 
-CN64Sym::CN64Sym()
-    : 
-      m_Output(&std::cout)
-      {
-  m_BuiltinSigs.LoadFromMemory(gBuiltinSignatureFile);
-}
+CN64Sym::CN64Sym() : m_Output(&std::cout) { m_BuiltinSigs.LoadFromMemory(gBuiltinSignatureFile); }
 
-CN64Sym::~CN64Sym() {
-  
-    delete[] m_Binary;
-  
-}
+CN64Sym::~CN64Sym() { delete[] m_Binary; }
 
 auto CN64Sym::LoadBinary(const char* binPath) -> bool {
   if (m_Binary != nullptr) {
@@ -116,7 +107,7 @@ void CN64Sym::UseBuiltinSignatures(bool bUseBuiltinSignatures) { m_bUseBuiltinSi
 void CN64Sym::SetThoroughScan(bool bThoroughScan) { m_bThoroughScan = bThoroughScan; }
 
 auto CN64Sym::SetOutputFormat(const char* fmtName) -> bool {
-  for (auto & FormatName : FormatNames) {
+  for (auto& FormatName : FormatNames) {
     if (strcmp(FormatName.name, fmtName) == 0) {
       m_OutputFormat = FormatName.fmt;
       return true;
@@ -175,7 +166,7 @@ auto CN64Sym::Run() -> bool {
     ProcessSignatureFile(m_BuiltinSigs);
   }
 
-  for (auto & m_LibPath : m_LibPaths) {
+  for (auto& m_LibPath : m_LibPaths) {
     ScanRecursive(m_LibPath);
   }
 
@@ -362,7 +353,8 @@ void CN64Sym::ProcessObject(obj_processing_context_t* objProcessingCtx) {
       matchedBlock = block;
       matchedAddress = blockAddress;
       break;
-    } if (nBytesMatched > bestPartialMatchLength) {
+    }
+    if (nBytesMatched > bestPartialMatchLength) {
       matchedBlock = block;
       matchedAddress = blockAddress;
       bestPartialMatchLength = nBytesMatched;
@@ -471,8 +463,8 @@ void CN64Sym::ProcessSignatureFile(CSignatureFile& sigFile) {
 }
 
 auto CN64Sym::TestElfObjectText(CElfContext* elf, const char* data, int* nBytesMatched) -> bool {
-  CElfSection *text_sec = nullptr;
-  CElfSection *rel_text_sec = nullptr;
+  CElfSection* text_sec = nullptr;
+  CElfSection* rel_text_sec = nullptr;
   CElfRelocation* text_relocations = nullptr;
   const char* text_sec_data = nullptr;
   uint32_t text_sec_size = 0;
@@ -622,7 +614,7 @@ void CN64Sym::TallyNumSymbolsToCheck() {
     m_NumSymbolsToCheck += m_BuiltinSigs.GetNumSymbols();
   }
 
-  for (auto & m_LibPath : m_LibPaths) {
+  for (auto& m_LibPath : m_LibPaths) {
     CountSymbolsRecursive(m_LibPath);
   }
 }

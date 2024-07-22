@@ -53,7 +53,7 @@ class CN64Sig {
   n64sig_output_fmt_t m_OutputFormat{N64SIG_FMT_DEFAULT};
   size_t m_NumProcessedSymbols{0};
 
-  static auto GetRelTypeName(uint8_t relType) -> const char * const;
+  static auto GetRelTypeName(uint8_t relType) -> const char *const;
   static void FormatAnonymousSymbol(char *symbolName);
   static void StripAndGetRelocsInSymbol(const char *objectName, reloc_map_t &relocs, CElfSymbol *symbol, CElfContext &elf);
   void ProcessLibrary(const char *path);

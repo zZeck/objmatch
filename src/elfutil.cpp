@@ -15,7 +15,6 @@
 #include "elfutil.h"
 
 #include <cstdint>
-
 #include <fstream>
 
 CElfContext::CElfContext() = default;
@@ -35,9 +34,7 @@ auto CElfContext::Load(const char* path) -> bool {
 }
 
 auto CElfContext::LoadFromMemory(uint8_t* buffer, size_t size) -> bool {
-  
-    delete[] m_Buffer;
-  
+  delete[] m_Buffer;
 
   m_Size = size;
   m_Buffer = new uint8_t[m_Size];

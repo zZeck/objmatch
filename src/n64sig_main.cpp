@@ -12,7 +12,7 @@
 
 #include "n64sig.h"
 
-int main(int argc, const char *argv[]) {
+auto main(int argc, const char *argv[]) -> int {
   if (argc < 2) {
     printf(
         "n64sig - signature file generator for n64sym (https://github.com/shygoo/n64sym)\n\n"

@@ -23,7 +23,7 @@
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #endif
 
-CSignatureFile::CSignatureFile() : m_Buffer(nullptr), m_Size(0), m_Pos(0) {}
+CSignatureFile::CSignatureFile()  = default;
 
 CSignatureFile::~CSignatureFile() {
   for (auto symbol : m_Symbols) {
@@ -326,7 +326,7 @@ void CSignatureFile::Parse() {
 errored:;
 }
 
-auto CSignatureFile::IsEOF() -> bool const { return (m_Pos >= m_Size); }
+auto CSignatureFile::IsEOF() const -> bool const { return (m_Pos >= m_Size); }
 
 auto CSignatureFile::AtEndOfLine() -> bool {
   while (!IsEOF() && (m_Buffer[m_Pos] == ' ' || m_Buffer[m_Pos] == '\t' || m_Buffer[m_Pos] == '\r')) {

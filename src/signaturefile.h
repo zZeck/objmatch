@@ -28,9 +28,9 @@ class CSignatureFile {
     std::vector<reloc_t> *relocs;
   };
 
-  char *m_Buffer;
-  size_t m_Size;
-  size_t m_Pos;
+  char *m_Buffer{nullptr};
+  size_t m_Size{0};
+  size_t m_Pos{0};
 
   std::vector<symbol_info_t> m_Symbols;
 
@@ -43,7 +43,7 @@ class CSignatureFile {
   auto GetNextToken() -> char *;
   auto AtEndOfLine() -> bool;
   void Parse();
-  auto IsEOF() -> bool const;
+  [[nodiscard]] auto IsEOF() const -> bool const;
 
   void SortRelocationsByOffset();
 

@@ -29,7 +29,7 @@ auto PathGetFileName(const char *path, char *dstName, size_t maxLength) -> size_
 
   const char *start = path;
 
-  while ((i--) != 0u) {
+  while ((i--) != 0U) {
     if (path[i] == '/' || path[i] == '\\') {
       start = &path[i + 1];
       break;

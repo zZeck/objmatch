@@ -49,9 +49,9 @@ class CN64Sig {
   std::map<uint32_t, symbol_entry_t> m_SymbolMap;
   std::vector<const char *> m_LibPaths;
 
-  bool m_bVerbose;
-  n64sig_output_fmt_t m_OutputFormat;
-  size_t m_NumProcessedSymbols;
+  bool m_bVerbose{false};
+  n64sig_output_fmt_t m_OutputFormat{N64SIG_FMT_DEFAULT};
+  size_t m_NumProcessedSymbols{0};
 
   static auto GetRelTypeName(uint8_t relType) -> const char * const;
   static void FormatAnonymousSymbol(char *symbolName);

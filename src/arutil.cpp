@@ -29,12 +29,12 @@ auto CArReader::ArTrimIdentifier(char* str) -> char* {
   return org;
 }
 
-CArReader::CArReader() : m_CurRealIdentifier(nullptr), m_ExIdentifierBlock(nullptr), m_CurBlock(nullptr), m_CurBlockSize(0), m_Buffer(nullptr), m_Size(0), m_CurPos(0) {}
+CArReader::CArReader()  = default;
 
 CArReader::~CArReader() {
-  if (m_Buffer != nullptr) {
+  
     delete[] m_Buffer;
-  }
+  
 }
 
 auto CArReader::Load(const char* path) -> bool {
@@ -119,4 +119,4 @@ auto CArReader::GetBlockIdentifier() -> const char* const  { return m_CurRealIde
 
 auto CArReader::GetBlockData() -> uint8_t* { return m_CurBlock; }
 
-auto CArReader::GetBlockSize() -> size_t const { return m_CurBlockSize; }
+auto CArReader::GetBlockSize() const -> size_t const { return m_CurBlockSize; }

@@ -30,17 +30,9 @@ CN64Sym::n64sym_fmt_lut_t CN64Sym::FormatNames[] = {{"default", N64SYM_FMT_DEFAU
                                                     {"armips", N64SYM_FMT_ARMIPS},   {"n64split", N64SYM_FMT_N64SPLIT}, {"splat", N64SYM_FMT_SPLAT}};
 
 CN64Sym::CN64Sym()
-    : m_Binary(nullptr),
-      m_BinarySize(0),
-      m_HeaderSize(0x80000000),
-      m_bVerbose(false),
-      m_bUseBuiltinSignatures(false),
-      m_bThoroughScan(false),
-      m_bOverrideHeaderSize(false),
-      m_Output(&std::cout),
-      m_OutputFormat(N64SYM_FMT_DEFAULT),
-      m_NumSymbolsToCheck(0),
-      m_NumSymbolsChecked(0) {
+    : 
+      m_Output(&std::cout)
+      {
   m_BuiltinSigs.LoadFromMemory(gBuiltinSignatureFile);
 }
 

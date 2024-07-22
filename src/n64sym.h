@@ -70,22 +70,22 @@ class CN64Sym {
 
   CThreadPool m_ThreadPool;
 
-  uint8_t* m_Binary;
-  size_t m_BinarySize;
-  uint32_t m_HeaderSize;
+  uint8_t* m_Binary{nullptr};
+  size_t m_BinarySize{0};
+  uint32_t m_HeaderSize{0x80000000};
 
-  bool m_bVerbose;
-  bool m_bUseBuiltinSignatures;
-  bool m_bThoroughScan;
-  bool m_bOverrideHeaderSize;
+  bool m_bVerbose{false};
+  bool m_bUseBuiltinSignatures{false};
+  bool m_bThoroughScan{false};
+  bool m_bOverrideHeaderSize{false};
 
   std::ostream* m_Output;
   std::ofstream m_OutputFile;
 
-  n64sym_output_fmt_t m_OutputFormat;
+  n64sym_output_fmt_t m_OutputFormat{N64SYM_FMT_DEFAULT};
 
-  size_t m_NumSymbolsToCheck;
-  size_t m_NumSymbolsChecked;
+  size_t m_NumSymbolsToCheck{0};
+  size_t m_NumSymbolsChecked{0};
 
   pthread_mutex_t m_ProgressMutex{};
 

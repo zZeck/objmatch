@@ -25,7 +25,7 @@
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #endif
 
-CN64Sig::CN64Sig() : m_bVerbose(false), m_OutputFormat(N64SIG_FMT_DEFAULT), m_NumProcessedSymbols(0) {}
+CN64Sig::CN64Sig()  {}
 
 CN64Sig::~CN64Sig() = default;
 

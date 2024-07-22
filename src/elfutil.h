@@ -40,59 +40,71 @@
 #endif
 #endif
 
-#define EI_MAG0 0
-#define EI_MAG1 1
-#define EI_MAG2 2
-#define EI_MAG3 3
-#define EI_CLASS 4
-#define EI_DATA 5
-#define EI_VERSION 6
-#define EI_OSABI 7
-#define EI_ABIVERSION 8
-#define EI_PAD 7
-#define EI_NIDENT 16
+enum {
+EI_MAG0 = 0,
+EI_MAG1 = 1,
+EI_MAG2 = 2,
+EI_MAG3 = 3,
+EI_CLASS = 4,
+EI_DATA = 5,
+EI_VERSION = 6,
+EI_OSABI = 7,
+EI_ABIVERSION = 8,
+EI_PAD = 7,
+EI_NIDENT = 16
+};
 
-#define ELFCLASSNONE 0  // Invalid class
-#define ELFCLASS32 1    // 32-bit objects
-#define ELFCLASS64 2    // 64-bit objects
+enum {
+ELFCLASSNONE = 0,  // Invalid class
+ELFCLASS32 = 1,    // 32-bit objects
+ELFCLASS64 = 2    // 64-bit objects
+};
 
 // mips relocation types
-#define R_MIPS_NONE 0
-#define R_MIPS_16 1
-#define R_MIPS_32 2
-#define R_MIPS_REL32 3
-#define R_MIPS_26 4
-#define R_MIPS_HI16 5
-#define R_MIPS_LO16 6
-#define R_MIPS_GPREL16 7
-#define R_MIPS_LITERAL 8
-#define R_MIPS_GOT16 9
-#define R_MIPS_CALL16 21
+enum {
+R_MIPS_NONE = 0,
+R_MIPS_16 = 1,
+R_MIPS_32 = 2,
+R_MIPS_REL32 = 3,
+R_MIPS_26 = 4,
+R_MIPS_HI16 = 5,
+R_MIPS_LO16 = 6,
+R_MIPS_GPREL16 = 7,
+R_MIPS_LITERAL = 8,
+R_MIPS_GOT16 = 9,
+R_MIPS_CALL16 = 21
+};
 
 // special section numbers
-#define SHN_UNDEF 0x0000
-#define SHN_LORESERVE 0xFF00
-#define SHN_LOPROC 0xFF00
-#define SHN_HIPROC 0xFF1F
-#define SHN_ABS 0xFFF1
-#define SHN_COMMON 0xFFF2
-#define SHN_HIRESERVE 0xFFFF
+enum {
+SHN_UNDEF = 0x0000,
+SHN_LORESERVE = 0xFF00,
+SHN_LOPROC = 0xFF00,
+SHN_HIPROC = 0xFF1F,
+SHN_ABS = 0xFFF1,
+SHN_COMMON = 0xFFF2,
+SHN_HIRESERVE = 0xFFFF
+};
 
 // symbol bindings
-#define STB_LOCAL 0
-#define STB_GLOBAL 1
-#define STB_WEAK 2
-#define STB_LOPROC 13
-#define STB_HIPROC 15
+enum {
+STB_LOCAL = 0,
+STB_GLOBAL = 1,
+STB_WEAK = 2,
+STB_LOPROC = 13,
+STB_HIPROC = 15
+};
 
 // symbol types
-#define STT_NOTYPE 0
-#define STT_OBJECT 1
-#define STT_FUNC 2
-#define STT_SECTION 3
-#define STT_FILE 4
-#define STT_LOPROC 13
-#define STT_HIPROC 15
+enum {
+STT_NOTYPE = 0,
+STT_OBJECT = 1,
+STT_FUNC = 2,
+STT_SECTION = 3,
+STT_FILE = 4,
+STT_LOPROC = 13,
+STT_HIPROC = 15
+};
 
 class CElfContext;
 class CElfHeader;
@@ -119,8 +131,8 @@ using CElfHeader = struct CElfHeader {
 
 class CElfContext {
   // CElfHeader* m_ElfHeader;
-  uint8_t* m_Buffer;
-  size_t m_Size;
+  uint8_t* m_Buffer{nullptr};
+  size_t m_Size{0};
 
  public:
   auto Header() -> CElfHeader* { return reinterpret_cast<CElfHeader*>(m_Buffer); }
@@ -137,7 +149,7 @@ class CElfContext {
   auto NumSections() -> uint16_t { return bswap16(Header()->e_shnum); }
   auto SectionNamesIndex() -> uint16_t { return bswap16(Header()->e_shstrndx); }
 
-  auto Size() -> size_t const { return m_Size; }
+ [[nodiscard]] auto Size() const -> size_t const { return m_Size; }
 
   auto Section(int index) -> CElfSection*;
   auto Section(const char* name) -> CElfSection*;
@@ -163,12 +175,12 @@ class CElfSection {
   uint32_t sh_entsize;
 
  public:
-  auto NameOffset() -> uint32_t const { return bswap32(sh_name); }
-  auto Offset() -> uint32_t const { return bswap32(sh_offset); }
-  auto Size() -> uint32_t const { return bswap32(sh_size); }
+  [[nodiscard]] auto NameOffset() const -> uint32_t const { return bswap32(sh_name); }
+  [[nodiscard]] auto Offset() const -> uint32_t const { return bswap32(sh_offset); }
+  [[nodiscard]] auto Size() const -> uint32_t const { return bswap32(sh_size); }
 
-  auto Name(CElfContext* elf) -> const char*;
-  auto Data(CElfContext* elf) -> const char*;
+  auto Name(CElfContext* elf) const -> const char*;
+  auto Data(CElfContext* elf) const -> const char*;
 };
 
 class CElfSymbol {
@@ -180,17 +192,17 @@ class CElfSymbol {
   uint16_t st_shndx;
 
  public:
-  auto NameOffset() -> uint32_t const { return bswap32(st_name); }
-  auto Value() -> uint32_t const { return bswap32(st_value); }
-  auto Size() -> uint32_t const { return bswap32(st_size); }
-  auto Info() -> uint8_t const { return st_info; }
-  auto Other() -> uint8_t const { return st_other; }
-  auto SectionIndex() -> uint16_t const { return bswap16(st_shndx); }
+  [[nodiscard]] auto NameOffset() const -> uint32_t const { return bswap32(st_name); }
+  [[nodiscard]] auto Value() const -> uint32_t const { return bswap32(st_value); }
+  [[nodiscard]] auto Size() const -> uint32_t const { return bswap32(st_size); }
+  [[nodiscard]] auto Info() const -> uint8_t const { return st_info; }
+  [[nodiscard]] auto Other() const -> uint8_t const { return st_other; }
+  [[nodiscard]] auto SectionIndex() const -> uint16_t const { return bswap16(st_shndx); }
 
-  auto Type() -> uint8_t { return static_cast<uint8_t>(Info() & 0x0F); }
-  auto Binding() -> uint8_t { return static_cast<uint8_t>(Info() >> 4); }
-  auto Name(CElfContext* elf) -> const char*;
-  auto Section(CElfContext* elf) -> const CElfSection*;
+  auto Type() const -> uint8_t { return static_cast<uint8_t>(Info() & 0x0F); }
+  auto Binding() const -> uint8_t { return static_cast<uint8_t>(Info() >> 4); }
+  auto Name(CElfContext* elf) const -> const char*;
+  auto Section(CElfContext* elf) const -> const CElfSection*;
 };
 
 class CElfRelocation {
@@ -198,10 +210,10 @@ class CElfRelocation {
   uint32_t r_info;
 
  public:
-  auto Offset() -> uint32_t const { return bswap32(r_offset); }
-  auto Info() -> uint32_t const { return bswap32(r_info); }
-  auto SymbolIndex() -> uint32_t { return Info() >> 8; }
-  auto Type() -> uint8_t { return static_cast<uint8_t>(Info() & 0x0F); }
+  [[nodiscard]] auto Offset() const -> uint32_t const { return bswap32(r_offset); }
+  [[nodiscard]] auto Info() const -> uint32_t const { return bswap32(r_info); }
+  auto SymbolIndex() const -> uint32_t { return Info() >> 8; }
+  auto Type() const -> uint8_t { return static_cast<uint8_t>(Info() & 0x0F); }
 
   auto Symbol(CElfContext* elf) -> CElfSymbol*;
 };

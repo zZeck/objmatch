@@ -18,7 +18,7 @@
 
 #include <fstream>
 
-CElfContext::CElfContext() : m_Buffer(nullptr), m_Size(0) {}
+CElfContext::CElfContext() = default;
 
 auto CElfContext::Load(const char* path) -> bool {
   std::ifstream file;
@@ -35,9 +35,9 @@ auto CElfContext::Load(const char* path) -> bool {
 }
 
 auto CElfContext::LoadFromMemory(uint8_t* buffer, size_t size) -> bool {
-  if (m_Buffer != nullptr) {
+  
     delete[] m_Buffer;
-  }
+  
 
   m_Size = size;
   m_Buffer = new uint8_t[m_Size];
@@ -123,7 +123,7 @@ auto CElfContext::Symbol(int index) -> CElfSymbol* {
 
 //////////////
 
-auto CElfSection::Name(CElfContext* elf) -> const char* {
+auto CElfSection::Name(CElfContext* elf) const -> const char* {
   CElfSection* shstr_sec = elf->Section(elf->SectionNamesIndex());
 
   if (shstr_sec == nullptr) {
@@ -144,7 +144,7 @@ auto CElfSection::Name(CElfContext* elf) -> const char* {
   return &shstr_data[NameOffset()];
 }
 
-auto CElfSection::Data(CElfContext* elf) -> const char* {
+auto CElfSection::Data(CElfContext* elf) const -> const char* {
   uint32_t const offset = Offset();
 
   if (offset >= elf->Size()) {
@@ -156,7 +156,7 @@ auto CElfSection::Data(CElfContext* elf) -> const char* {
 
 //////////////
 
-auto CElfSymbol::Name(CElfContext* elf) -> const char* {
+auto CElfSymbol::Name(CElfContext* elf) const -> const char* {
   CElfSection* str_sec = elf->Section(".strtab");
 
   if (str_sec == nullptr) {
@@ -166,7 +166,7 @@ auto CElfSymbol::Name(CElfContext* elf) -> const char* {
   return str_sec->Data(elf) + NameOffset();
 }
 
-auto CElfSymbol::Section(CElfContext* elf) -> const CElfSection* { return elf->Section(SectionIndex()); }
+auto CElfSymbol::Section(CElfContext* elf) const -> const CElfSection* { return elf->Section(SectionIndex()); }
 
 //////////////
 

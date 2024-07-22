@@ -17,7 +17,9 @@
 #include <cstdlib>
 
 #define AR_FILE_SIG "!<arch>\n"
-#define AR_FILE_SIG_LEN 8
+enum {
+AR_FILE_SIG_LEN = 8
+};
 
 class CArReader {
   using ar_header_t = struct {
@@ -30,14 +32,14 @@ class CArReader {
     char szEndChar[2];
   };
 
-  char* m_CurRealIdentifier;
-  char* m_ExIdentifierBlock;
-  uint8_t* m_CurBlock;
-  size_t m_CurBlockSize;
+  char* m_CurRealIdentifier{nullptr};
+  char* m_ExIdentifierBlock{nullptr};
+  uint8_t* m_CurBlock{nullptr};
+  size_t m_CurBlockSize{0};
 
-  uint8_t* m_Buffer;
-  size_t m_Size;
-  size_t m_CurPos;
+  uint8_t* m_Buffer{nullptr};
+  size_t m_Size{0};
+  size_t m_CurPos{0};
 
   static auto ArTrimIdentifier(char* str) -> char*;
 
@@ -50,7 +52,7 @@ class CArReader {
   auto SeekNextBlock() -> bool;
   auto GetBlockIdentifier() -> const char* const;
   auto GetBlockData() -> uint8_t*;
-  auto GetBlockSize() -> size_t const;
+  [[nodiscard]] auto GetBlockSize() const -> size_t const;
 };
 
 #endif  // ARUTIL_H

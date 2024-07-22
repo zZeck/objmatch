@@ -17,14 +17,15 @@ Checks:
   - '-cppcoreguidelines-pro-type-vararg'
   - '-hicpp-vararg'
   - '-hicpp-signed-bitwise'
+  - '-llvm-header-guard'
+  - '-fuchsia-default-arguments-calls'
   - '-abseil-*'
   - '-altera-*'
   - '-boost-*'
   - '-objc-*'
   - '-openmp-*'
   - '-llvmlibc-*'
+HeaderFilterRegex: '.*'
 CheckOptions:
   - key:             readability-braces-around-statements.ShortStatementLines
     value:           '2'
-ExtraArgs:
-  - '-std=c++20'

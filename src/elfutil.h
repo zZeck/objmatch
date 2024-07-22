@@ -15,10 +15,10 @@
 #ifndef ELFUTIL_H
 #define ELFUTIL_H
 
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 #ifndef bswap32
 #ifdef __GNUC__
@@ -100,7 +100,7 @@ class CElfSection;
 class CElfSymbol;
 class CElfRelocation;
 
-typedef struct CElfHeader {
+using CElfHeader = struct CElfHeader {
   uint8_t e_ident[EI_NIDENT];
   uint16_t e_type;
   uint16_t e_machine;
@@ -115,7 +115,7 @@ typedef struct CElfHeader {
   uint16_t e_shentsize;
   uint16_t e_shnum;
   uint16_t e_shstrndx;
-} CElfHeader;
+};
 
 class CElfContext {
   // CElfHeader* m_ElfHeader;
@@ -123,31 +123,31 @@ class CElfContext {
   size_t m_Size;
 
  public:
-  CElfHeader* Header() { return (CElfHeader*)m_Buffer; }
+  auto Header() -> CElfHeader* { return reinterpret_cast<CElfHeader*>(m_Buffer); }
 
   CElfContext();
 
-  bool Load(const char* path);
-  bool LoadFromMemory(uint8_t* buffer, size_t size);
+  auto Load(const char* path) -> bool;
+  auto LoadFromMemory(uint8_t* buffer, size_t size) -> bool;
 
-  uint8_t ABI() { return Header()->e_ident[EI_OSABI]; }
-  uint16_t Machine() { return bswap16(Header()->e_machine); }
-  uint32_t SectionHeaderOffset() { return bswap32(Header()->e_shoff); }
-  uint16_t SectionHeaderEntrySize() { return bswap16(Header()->e_shentsize); }
-  uint16_t NumSections() { return bswap16(Header()->e_shnum); }
-  uint16_t SectionNamesIndex() { return bswap16(Header()->e_shstrndx); }
+  auto ABI() -> uint8_t { return Header()->e_ident[EI_OSABI]; }
+  auto Machine() -> uint16_t { return bswap16(Header()->e_machine); }
+  auto SectionHeaderOffset() -> uint32_t { return bswap32(Header()->e_shoff); }
+  auto SectionHeaderEntrySize() -> uint16_t { return bswap16(Header()->e_shentsize); }
+  auto NumSections() -> uint16_t { return bswap16(Header()->e_shnum); }
+  auto SectionNamesIndex() -> uint16_t { return bswap16(Header()->e_shstrndx); }
 
-  size_t Size() { return m_Size; }
+  auto Size() -> size_t const { return m_Size; }
 
-  CElfSection* Section(int index);
-  CElfSection* Section(const char* name);
-  bool SectionIndexOf(const char* name, int* index);
+  auto Section(int index) -> CElfSection*;
+  auto Section(const char* name) -> CElfSection*;
+  auto SectionIndexOf(const char* name, int* index) -> bool;
 
-  int NumSymbols();
-  CElfSymbol* Symbol(int index);
+  auto NumSymbols() -> int;
+  auto Symbol(int index) -> CElfSymbol*;
 
-  int NumTextRelocations();
-  CElfRelocation* TextRelocation(int index);
+  auto NumTextRelocations() -> int;
+  auto TextRelocation(int index) -> CElfRelocation*;
 };
 
 class CElfSection {
@@ -163,12 +163,12 @@ class CElfSection {
   uint32_t sh_entsize;
 
  public:
-  uint32_t NameOffset() { return bswap32(sh_name); }
-  uint32_t Offset() { return bswap32(sh_offset); }
-  uint32_t Size() { return bswap32(sh_size); }
+  auto NameOffset() -> uint32_t const { return bswap32(sh_name); }
+  auto Offset() -> uint32_t const { return bswap32(sh_offset); }
+  auto Size() -> uint32_t const { return bswap32(sh_size); }
 
-  const char* Name(CElfContext* elf);
-  const char* Data(CElfContext* elf);
+  auto Name(CElfContext* elf) -> const char*;
+  auto Data(CElfContext* elf) -> const char*;
 };
 
 class CElfSymbol {
@@ -180,17 +180,17 @@ class CElfSymbol {
   uint16_t st_shndx;
 
  public:
-  uint32_t NameOffset() { return bswap32(st_name); }
-  uint32_t Value() { return bswap32(st_value); }
-  uint32_t Size() { return bswap32(st_size); }
-  uint8_t Info() { return st_info; }
-  uint8_t Other() { return st_other; }
-  uint16_t SectionIndex() { return bswap16(st_shndx); }
+  auto NameOffset() -> uint32_t const { return bswap32(st_name); }
+  auto Value() -> uint32_t const { return bswap32(st_value); }
+  auto Size() -> uint32_t const { return bswap32(st_size); }
+  auto Info() -> uint8_t const { return st_info; }
+  auto Other() -> uint8_t const { return st_other; }
+  auto SectionIndex() -> uint16_t const { return bswap16(st_shndx); }
 
-  uint8_t Type() { return (uint8_t)(Info() & 0x0F); }
-  uint8_t Binding() { return (uint8_t)(Info() >> 4); }
-  const char* Name(CElfContext* elf);
-  CElfSection* Section(CElfContext* elf);
+  auto Type() -> uint8_t { return static_cast<uint8_t>(Info() & 0x0F); }
+  auto Binding() -> uint8_t { return static_cast<uint8_t>(Info() >> 4); }
+  auto Name(CElfContext* elf) -> const char*;
+  auto Section(CElfContext* elf) -> const CElfSection*;
 };
 
 class CElfRelocation {
@@ -198,12 +198,12 @@ class CElfRelocation {
   uint32_t r_info;
 
  public:
-  uint32_t Offset() { return bswap32(r_offset); }
-  uint32_t Info() { return bswap32(r_info); }
-  uint32_t SymbolIndex() { return Info() >> 8; }
-  uint8_t Type() { return (uint8_t)(Info() & 0x0F); }
+  auto Offset() -> uint32_t const { return bswap32(r_offset); }
+  auto Info() -> uint32_t const { return bswap32(r_info); }
+  auto SymbolIndex() -> uint32_t { return Info() >> 8; }
+  auto Type() -> uint8_t { return static_cast<uint8_t>(Info() & 0x0F); }
 
-  CElfSymbol* Symbol(CElfContext* elf);
+  auto Symbol(CElfContext* elf) -> CElfSymbol*;
 };
 
 #endif  // ELFUTIL_H

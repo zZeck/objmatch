@@ -13,27 +13,27 @@
 
 class CThreadPool {
  public:
-  typedef void* (*worker_routine_t)(void*);
+  using worker_routine_t = void *(*)(void *);
 
  private:
-  typedef struct {
+  using worker_context_t = struct {
     volatile bool bRunning;
     pthread_t pthread;
     worker_routine_t routine;
     void* param;
-  } worker_context_t;
+  };
 
   worker_context_t* m_Workers;
   int m_NumWorkers;
 
-  pthread_mutex_t m_DefaultMutex;
+  pthread_mutex_t m_DefaultMutex{};
 
-  static void* RoutineProc(void* _threadContext);
+  static auto RoutineProc(void* _worker) -> void*;
 
  public:
   CThreadPool();
   ~CThreadPool();
-  int GetNumCPUCores();
+  static auto GetNumCPUCores() -> int;
 
   void WaitForWorkers();
   void AddWorker(worker_routine_t routine, void* param);

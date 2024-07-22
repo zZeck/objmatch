@@ -27,19 +27,19 @@
 
 CN64Sig::CN64Sig() : m_bVerbose(false), m_OutputFormat(N64SIG_FMT_DEFAULT), m_NumProcessedSymbols(0) {}
 
-CN64Sig::~CN64Sig() {}
+CN64Sig::~CN64Sig() = default;
 
 void CN64Sig::AddLibPath(const char *path) { m_LibPaths.push_back(path); }
 
-int stricmp(const char *a, const char *b) {
-  size_t alen = strlen(a);
-  size_t blen = strlen(b);
+auto stricmp(const char *a, const char *b) -> int {
+  size_t const alen = strlen(a);
+  size_t const blen = strlen(b);
 
-  size_t len = min(alen, blen);
+  size_t const len = min(alen, blen);
 
   for (size_t i = 0; i < len; i++) {
-    int ac = tolower(a[i]);
-    int bc = tolower(b[i]);
+    int const ac = tolower(a[i]);
+    int const bc = tolower(b[i]);
 
     if (ac < bc) return -1;
     if (ac > bc) return 1;
@@ -51,14 +51,14 @@ int stricmp(const char *a, const char *b) {
   return 0;
 }
 
-const char *strPastUnderscores(const char *s) {
+auto strPastUnderscores(const char *s) -> const char * const{
   while (*s == '_') {
     s++;
   }
   return s;
 }
 
-bool CN64Sig::Run() {
+auto CN64Sig::Run() -> bool {
   m_NumProcessedSymbols = 0;
 
   printf("# sig_v1\n\n");
@@ -76,7 +76,8 @@ bool CN64Sig::Run() {
 
   std::vector<symbol_entry_t> symbols;
 
-  for (auto &i : m_SymbolMap) {
+  symbols.reserve(m_SymbolMap.size());
+for (auto &i : m_SymbolMap) {
     symbols.push_back(i.second);
   }
 
@@ -87,7 +88,7 @@ bool CN64Sig::Run() {
     for (auto &symbolEntry : symbols) {
       printf("%s 0x%04X 0x%08X 0x%08X\n", symbolEntry.name, symbolEntry.size, symbolEntry.crc_a, symbolEntry.crc_b);
 
-      if (symbolEntry.relocs == NULL) {
+      if (symbolEntry.relocs == nullptr) {
         continue;
       }
 
@@ -121,7 +122,7 @@ bool CN64Sig::Run() {
     for (auto &symbolEntry : symbols) {
       printf("%s  [\"%s\", %u, %u, %u, [", (bFirstSymbol ? "" : ",\n"), symbolEntry.name, symbolEntry.size, symbolEntry.crc_a, symbolEntry.crc_b);
 
-      if (symbolEntry.relocs == NULL) {
+      if (symbolEntry.relocs == nullptr) {
         printf("]]");
         continue;
       }
@@ -133,7 +134,7 @@ bool CN64Sig::Run() {
         const reloc_entry_t &relocEntry = i.first;
         const std::vector<uint16_t> &offsets = i.second;
 
-        printf("%s    [\"%s\", \"%s\", [", (bFirstReloc ? "" : ",\n"), GetRelTypeName(relocEntry.relocType), relocEntry.relocSymbolName);
+        printf(R"(%s    ["%s", "%s", [)", (bFirstReloc ? "" : ",\n"), GetRelTypeName(relocEntry.relocType), relocEntry.relocSymbolName);
 
         bool bFirstOffset = true;
         for (auto &offset : offsets) {
@@ -155,7 +156,7 @@ bool CN64Sig::Run() {
   return true;
 }
 
-const char *CN64Sig::GetRelTypeName(uint8_t relType) {
+auto CN64Sig::GetRelTypeName(uint8_t relType) -> const char * const {
   switch (relType) {
     case R_MIPS_26:
       return "targ26";
@@ -165,12 +166,12 @@ const char *CN64Sig::GetRelTypeName(uint8_t relType) {
       return "hi16";
   }
 
-  return NULL;
+  return nullptr;
 }
 
 void CN64Sig::FormatAnonymousSymbol(char *symbolName) {
   char *c = symbolName;
-  while (*c++) {
+  while (*c++ != 0) {
     if (*c == '.') {
       *c = '_';
     }
@@ -178,16 +179,16 @@ void CN64Sig::FormatAnonymousSymbol(char *symbolName) {
 }
 
 void CN64Sig::StripAndGetRelocsInSymbol(const char *objectName, reloc_map_t &relocs, CElfSymbol *symbol, CElfContext &elf) {
-  int numTextRelocations = elf.NumTextRelocations();
-  uint32_t symbolOffset = symbol->Value();
-  uint32_t symbolSize = symbol->Size();
+  int const numTextRelocations = elf.NumTextRelocations();
+  uint32_t const symbolOffset = symbol->Value();
+  uint32_t const symbolSize = symbol->Size();
 
   uint32_t lastHi16Addend = 0;
 
   for (int nRel = 0; nRel < numTextRelocations; nRel++) {
     CElfRelocation *relocation = elf.TextRelocation(nRel);
 
-    uint32_t relOffset = relocation->Offset();
+    uint32_t const relOffset = relocation->Offset();
 
     if (relOffset < symbolOffset || relOffset >= symbolOffset + symbolSize) {
       continue;
@@ -197,18 +198,18 @@ void CN64Sig::StripAndGetRelocsInSymbol(const char *objectName, reloc_map_t &rel
 
     CElfSymbol *relSymbol = relocation->Symbol(&elf);
     strncpy(relSymbolName, relSymbol->Name(&elf), sizeof(relSymbolName) - 1);
-    uint8_t relType = relocation->Type();
+    uint8_t const relType = relocation->Type();
     // const char *relTypeName = GetRelTypeName(relocation->Type());
 
-    const uint8_t *textData = (const uint8_t *)elf.Section(".text")->Data(&elf);
-    uint8_t *opcode = (uint8_t *)&textData[relocation->Offset()];
+    const auto *textData = reinterpret_cast<const uint8_t *>(elf.Section(".text")->Data(&elf));
+    auto *opcode = const_cast<uint8_t *>(&textData[relocation->Offset()]);
     reloc_entry_t relocEntry;
     // relocEntry.param = 0;
 
     if (relSymbol->Binding() == STB_LOCAL)  // anonymous symbol
     {
       uint32_t addend = 0;
-      uint32_t opcodeBE = bswap32(*(uint32_t *)opcode);
+      uint32_t const opcodeBE = bswap32(*reinterpret_cast<uint32_t *>(opcode));
 
       if (relType == R_MIPS_HI16) {
         addend = (opcodeBE & 0xFFFF) << 16;
@@ -219,10 +220,10 @@ void CN64Sig::StripAndGetRelocsInSymbol(const char *objectName, reloc_map_t &rel
           exit(EXIT_FAILURE);
         }
 
-        uint8_t *opcode2 = (uint8_t *)&textData[relocation2->Offset()];
-        uint32_t opcode2BE = bswap32(*(uint32_t *)opcode2);
+        auto *opcode2 = const_cast<uint8_t *>(&textData[relocation2->Offset()]);
+        uint32_t const opcode2BE = bswap32(*reinterpret_cast<uint32_t *>(opcode2));
 
-        addend += (int16_t)(opcode2BE & 0xFFFF);
+        addend += static_cast<int16_t>(opcode2BE & 0xFFFF);
 
         lastHi16Addend = addend;
 
@@ -273,7 +274,7 @@ void CN64Sig::ProcessLibrary(const char *path) {
   while (arReader.SeekNextBlock()) {
     const char *blockId = arReader.GetBlockIdentifier();
     uint8_t *objectData = arReader.GetBlockData();
-    size_t objectSize = arReader.GetBlockSize();
+    size_t const objectSize = arReader.GetBlockSize();
 
     if (!PathIsObjectFile(blockId)) {
       continue;
@@ -291,9 +292,9 @@ void CN64Sig::ProcessLibrary(const char *path) {
 void CN64Sig::ProcessObject(CElfContext &elf, const char *objectName) {
   // printf("# object: %s\n", objectName);
 
-  CElfSection *textSection;
-  const uint8_t *textData;
-  int indexOfText;
+  CElfSection *textSection = nullptr;
+  const uint8_t *textData = nullptr;
+  int indexOfText = 0;
 
   // todo rename IndexOfSection
   if (!elf.SectionIndexOf(".text", &indexOfText)) {
@@ -301,18 +302,18 @@ void CN64Sig::ProcessObject(CElfContext &elf, const char *objectName) {
   }
 
   textSection = elf.Section(indexOfText);
-  textData = (const uint8_t *)textSection->Data(&elf);
+  textData = reinterpret_cast<const uint8_t *>(textSection->Data(&elf));
 
-  int numSymbols = elf.NumSymbols();
+  int const numSymbols = elf.NumSymbols();
 
   for (int nSymbol = 0; nSymbol < numSymbols; nSymbol++) {
     CElfSymbol *symbol = elf.Symbol(nSymbol);
 
-    int symbolSectionIndex = symbol->SectionIndex();
+    int const symbolSectionIndex = symbol->SectionIndex();
     const char *symbolName = symbol->Name(&elf);
-    uint8_t symbolType = symbol->Type();
-    uint32_t symbolSize = symbol->Size();
-    uint32_t symbolOffset = symbol->Value();
+    uint8_t const symbolType = symbol->Type();
+    uint32_t const symbolSize = symbol->Size();
+    uint32_t const symbolOffset = symbol->Value();
 
     if (symbolSectionIndex != indexOfText || symbolType != STT_FUNC || symbolSize == 0) {
       continue;
@@ -330,7 +331,7 @@ void CN64Sig::ProcessObject(CElfContext &elf, const char *objectName) {
 
     m_NumProcessedSymbols++;
 
-    if (m_SymbolMap.count(symbolEntry.crc_b) != 0) {
+    if (m_SymbolMap.contains(symbolEntry.crc_b)) {
       if (m_bVerbose) {
         if (strcmp(symbolEntry.name, m_SymbolMap[symbolEntry.crc_b].name) != 0) {
           printf("# warning: skipped %s (have %s, crc: %08X)\n", symbolEntry.name, m_SymbolMap[symbolEntry.crc_b].name, symbolEntry.crc_b);
@@ -369,18 +370,18 @@ void CN64Sig::ScanRecursive(const char *path) {
     return;
   }
 
-  DIR *dir;
+  DIR *dir = nullptr;
   dir = opendir(path);
-  if (dir == NULL) {
+  if (dir == nullptr) {
     printf("%s is neither a directory or file with symbols.\n", path);
     return;
   }
 
-  struct dirent *entry;
-  while ((entry = readdir(dir)) != NULL) {
+  struct dirent *entry = nullptr;
+  while ((entry = readdir(dir)) != nullptr) {
     char next_path[PATH_MAX];
 
-    if (!entry->d_name) {
+    if (entry->d_name == nullptr) {
       continue;
     }
 
@@ -411,7 +412,7 @@ void CN64Sig::ScanRecursive(const char *path) {
 
 void CN64Sig::SetVerbose(bool bVerbose) { m_bVerbose = bVerbose; }
 
-bool CN64Sig::SetOutputFormat(const char *format) {
+auto CN64Sig::SetOutputFormat(const char *format) -> bool {
   if (strcmp(format, "json") == 0) {
     m_OutputFormat = N64SIG_FMT_JSON;
     return true;

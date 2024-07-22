@@ -1,13 +1,13 @@
 #ifndef PATHUTIL_H
 #define PATHUTIL_H
 
-#include <stddef.h>
+#include <cstddef>
 
-bool PathIsStaticLibrary(const char *path);
-bool PathIsObjectFile(const char *path);
-bool PathIsSignatureFile(const char *path);
-bool PathIsN64Rom(const char *path);
-size_t PathGetFileName(const char *path, char *dstName, size_t maxLength);
-bool IsFileWithSymbols(const char *path);
+auto PathIsStaticLibrary(const char *path) -> bool;
+auto PathIsObjectFile(const char *path) -> bool;
+auto PathIsSignatureFile(const char *path) -> bool;
+auto PathIsN64Rom(const char *path) -> bool;
+auto PathGetFileName(const char *path, char *dstName, size_t maxLength) -> size_t;
+auto IsFileWithSymbols(const char *path) -> bool;
 
 #endif  // PATHUTIL_H

@@ -3,12 +3,12 @@
 #include <cstring>
 
 // returns true if 'str' ends with 'suffix'
-static bool EndsWith(const char *str, const char *suffix) {
-  if (!str || !suffix) {
+static auto EndsWith(const char *str, const char *suffix) -> bool {
+  if ((str == nullptr) || (suffix == nullptr)) {
     return false;
   }
-  size_t len_str = strlen(str);
-  size_t len_suffix = strlen(suffix);
+  size_t const len_str = strlen(str);
+  size_t const len_suffix = strlen(suffix);
   if (len_suffix > len_str) {
     return false;
   }
@@ -16,8 +16,8 @@ static bool EndsWith(const char *str, const char *suffix) {
 }
 
 // extracts file name without extension
-size_t PathGetFileName(const char *path, char *dstName, size_t maxLength) {
-  if (!path) {
+auto PathGetFileName(const char *path, char *dstName, size_t maxLength) -> size_t {
+  if (path == nullptr) {
     return 0;
   }
 
@@ -29,7 +29,7 @@ size_t PathGetFileName(const char *path, char *dstName, size_t maxLength) {
 
   const char *start = path;
 
-  while (i--) {
+  while ((i--) != 0u) {
     if (path[i] == '/' || path[i] == '\\') {
       start = &path[i + 1];
       break;
@@ -38,7 +38,7 @@ size_t PathGetFileName(const char *path, char *dstName, size_t maxLength) {
 
   const char *end = strchr(&path[i + 1], '.');
 
-  if (!end || (size_t)((end - start) + 1) >= maxLength) {
+  if ((end == nullptr) || static_cast<size_t>((end - start) + 1) >= maxLength) {
     strncpy(dstName, start, maxLength);
     return maxLength;
   }
@@ -48,28 +48,28 @@ size_t PathGetFileName(const char *path, char *dstName, size_t maxLength) {
   return end - start;
 }
 
-bool PathIsStaticLibrary(const char *path) {
+auto PathIsStaticLibrary(const char *path) -> bool {
   if (strlen(path) < 3) {
     return false;
   }
   return EndsWith(path, ".a") || EndsWith(path, ".A");
 }
 
-bool PathIsObjectFile(const char *path) {
+auto PathIsObjectFile(const char *path) -> bool {
   if (strlen(path) < 3) {
     return false;
   }
   return EndsWith(path, ".o") || EndsWith(path, ".O");
 }
 
-bool PathIsSignatureFile(const char *path) {
+auto PathIsSignatureFile(const char *path) -> bool {
   if (strlen(path) < 5) {
     return false;
   }
   return EndsWith(path, ".sig") || EndsWith(path, ".SIG");
 }
 
-bool PathIsN64Rom(const char *path) {
+auto PathIsN64Rom(const char *path) -> bool {
   if (strlen(path) < 5) {
     return false;
   }
@@ -78,4 +78,4 @@ bool PathIsN64Rom(const char *path) {
           EndsWith(path, ".V64"));
 }
 
-bool IsFileWithSymbols(const char *path) { return PathIsStaticLibrary(path) || PathIsObjectFile(path) || PathIsSignatureFile(path); }
+auto IsFileWithSymbols(const char *path) -> bool { return PathIsStaticLibrary(path) || PathIsObjectFile(path) || PathIsSignatureFile(path); }

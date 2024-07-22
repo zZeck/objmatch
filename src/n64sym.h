@@ -10,8 +10,8 @@
 #ifndef N64SYM_H
 #define N64SYM_H
 
-#include <stdarg.h>
-#include <stdlib.h>
+#include <cstdarg>
+#include <cstdlib>
 
 #include <algorithm>
 #include <fstream>
@@ -24,49 +24,49 @@
 #include "signaturefile.h"
 #include "threadpool.h"
 
-typedef enum { N64SYM_FMT_DEFAULT, N64SYM_FMT_PJ64, N64SYM_FMT_NEMU, N64SYM_FMT_ARMIPS, N64SYM_FMT_N64SPLIT, N64SYM_FMT_SPLAT } n64sym_output_fmt_t;
+using n64sym_output_fmt_t = enum { N64SYM_FMT_DEFAULT, N64SYM_FMT_PJ64, N64SYM_FMT_NEMU, N64SYM_FMT_ARMIPS, N64SYM_FMT_N64SPLIT, N64SYM_FMT_SPLAT };
 
 class CN64Sym {
  public:
   CN64Sym();
   ~CN64Sym();
-  bool LoadBinary(const char* binPath);
+  auto LoadBinary(const char* binPath) -> bool;
   void AddLibPath(const char* libPath);
   void UseBuiltinSignatures(bool bUseBuiltinSignatures);
   void SetVerbose(bool bVerbose);
   void SetThoroughScan(bool bThorough);
-  bool SetOutputFormat(const char* fmtName);
+  auto SetOutputFormat(const char* fmtName) -> bool;
   void SetHeaderSize(uint32_t headerSize);
-  bool SetOutputPath(const char* path);
-  bool Run();
+  auto SetOutputPath(const char* path) -> bool;
+  auto Run() -> bool;
   void DumpResults();
 
  private:
-  typedef struct {
+  using n64sym_fmt_lut_t = struct {
     const char* name;
     n64sym_output_fmt_t fmt;
-  } n64sym_fmt_lut_t;
+  };
 
   static n64sym_fmt_lut_t FormatNames[];
 
-  typedef struct {
+  using obj_processing_context_t = struct {
     CN64Sym* mt_this;
     const char* libraryPath;
     const char* blockIdentifier;
     uint8_t* blockData;
     size_t blockSize;
-  } obj_processing_context_t;
+  };
 
-  typedef struct {
+  using search_result_t = struct {
     uint32_t address;  // from jump target
     uint32_t size;     // data match size
     char name[64];
-  } search_result_t;
+  };
 
-  typedef struct {
+  using partial_match_t = struct {
     uint32_t address;
     int nBytesMatched;
-  } partial_match_t;
+  };
 
   CThreadPool m_ThreadPool;
 
@@ -87,7 +87,7 @@ class CN64Sym {
   size_t m_NumSymbolsToCheck;
   size_t m_NumSymbolsChecked;
 
-  pthread_mutex_t m_ProgressMutex;
+  pthread_mutex_t m_ProgressMutex{};
 
   std::vector<search_result_t> m_Results;
   std::vector<const char*> m_LibPaths;
@@ -101,26 +101,26 @@ class CN64Sym {
   void ProcessLibrary(const char* path);
   void ProcessObject(const char* path);
   void ProcessObject(obj_processing_context_t* objProcessingCtx);
-  static void* ProcessObjectProc(void* _objProcessingCtx);
+  static auto ProcessObjectProc(void* _objProcessingCtx) -> void*;
   void ProcessSignatureFile(const char* path);
   void ProcessSignatureFile(CSignatureFile& sigFile);
 
-  bool TestElfObjectText(CElfContext* elf, const char* data, int* nBytesMatched);
-  bool TestSignatureSymbol(CSignatureFile& sigFile, size_t nSymbol, uint32_t offset);
+  static auto TestElfObjectText(CElfContext* elf, const char* data, int* nBytesMatched) -> bool;
+  auto TestSignatureSymbol(CSignatureFile& sigFile, size_t nSymbol, uint32_t offset) -> bool;
 
   void TallyNumSymbolsToCheck();
   void CountSymbolsRecursive(const char* path);
   void CountSymbolsInFile(const char* path);
-  size_t CountGlobalSymbolsInElf(CElfContext& elf);
+  static auto CountGlobalSymbolsInElf(CElfContext& elf) -> size_t;
 
-  bool AddResult(search_result_t result);
+  auto AddResult(search_result_t result) -> bool;
   void AddSymbolResults(CElfContext* elf, uint32_t baseAddress, uint32_t maxTextOffset = 0);
   void AddRelocationResults(CElfContext* elf, const char* block, const char* altNamePrefix, int maxTextOffset = 0);
-  static bool ResultCmp(search_result_t a, search_result_t b);
+  static auto ResultCmp(search_result_t a, search_result_t b) -> bool;
   void SortResults();
 
   void ProgressInc(size_t numSymbols);
-  void Log(const char* format, ...);
+  void Log(const char* format, ...) const;
   void Output(const char* format, ...);
   static void ClearLine(int nChars);
 };

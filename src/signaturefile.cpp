@@ -23,21 +23,21 @@
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #endif
 
-CSignatureFile::CSignatureFile() : m_Buffer(NULL), m_Size(0), m_Pos(0) {}
+CSignatureFile::CSignatureFile() : m_Buffer(nullptr), m_Size(0), m_Pos(0) {}
 
 CSignatureFile::~CSignatureFile() {
   for (auto symbol : m_Symbols) {
-    if (symbol.relocs != NULL) {
+    
       delete symbol.relocs;
-    }
+    
   }
 
   delete[] m_Buffer;
 }
 
-size_t CSignatureFile::GetNumSymbols() { return m_Symbols.size(); }
+auto CSignatureFile::GetNumSymbols() -> size_t { return m_Symbols.size(); }
 
-uint32_t CSignatureFile::GetSymbolSize(size_t nSymbol) {
+auto CSignatureFile::GetSymbolSize(size_t nSymbol) -> uint32_t {
   if (nSymbol >= m_Symbols.size()) {
     return 0;
   }
@@ -45,7 +45,7 @@ uint32_t CSignatureFile::GetSymbolSize(size_t nSymbol) {
   return m_Symbols[nSymbol].size;
 }
 
-bool CSignatureFile::GetSymbolName(size_t nSymbol, char *str, size_t nMaxChars) {
+auto CSignatureFile::GetSymbolName(size_t nSymbol, char *str, size_t nMaxChars) -> bool {
   if (nSymbol >= m_Symbols.size()) {
     return false;
   }
@@ -55,40 +55,40 @@ bool CSignatureFile::GetSymbolName(size_t nSymbol, char *str, size_t nMaxChars) 
   return true;
 }
 
-size_t CSignatureFile::GetNumRelocs(size_t nSymbol) {
-  if (nSymbol >= m_Symbols.size() || m_Symbols[nSymbol].relocs == NULL) {
+auto CSignatureFile::GetNumRelocs(size_t nSymbol) -> size_t {
+  if (nSymbol >= m_Symbols.size() || m_Symbols[nSymbol].relocs == nullptr) {
     return 0;
   }
 
   return m_Symbols[nSymbol].relocs->size();
 }
 
-uint32_t CSignatureFile::GetRelocOffset(size_t nSymbol, size_t nReloc) {
-  if (nSymbol >= m_Symbols.size() || m_Symbols[nSymbol].relocs == NULL || nReloc >= m_Symbols[nSymbol].relocs->size()) {
+auto CSignatureFile::GetRelocOffset(size_t nSymbol, size_t nReloc) -> uint32_t {
+  if (nSymbol >= m_Symbols.size() || m_Symbols[nSymbol].relocs == nullptr || nReloc >= m_Symbols[nSymbol].relocs->size()) {
     return 0;
   }
 
-  reloc_t reloc = m_Symbols[nSymbol].relocs->at(nReloc);
+  reloc_t const reloc = m_Symbols[nSymbol].relocs->at(nReloc);
 
   return reloc.offset;
 }
 
-uint8_t CSignatureFile::GetRelocType(size_t nSymbol, size_t nReloc) {
-  if (nSymbol >= m_Symbols.size() || m_Symbols[nSymbol].relocs == NULL || nReloc >= m_Symbols[nSymbol].relocs->size()) {
+auto CSignatureFile::GetRelocType(size_t nSymbol, size_t nReloc) -> uint8_t {
+  if (nSymbol >= m_Symbols.size() || m_Symbols[nSymbol].relocs == nullptr || nReloc >= m_Symbols[nSymbol].relocs->size()) {
     return -1;
   }
 
-  reloc_t reloc = m_Symbols[nSymbol].relocs->at(nReloc);
+  reloc_t const reloc = m_Symbols[nSymbol].relocs->at(nReloc);
 
   return reloc.type;
 }
 
-bool CSignatureFile::GetRelocName(size_t nSymbol, size_t nReloc, char *str, size_t nMaxChars) {
-  if (nSymbol >= m_Symbols.size() || m_Symbols[nSymbol].relocs == NULL || nReloc >= m_Symbols[nSymbol].relocs->size()) {
+auto CSignatureFile::GetRelocName(size_t nSymbol, size_t nReloc, char *str, size_t nMaxChars) -> bool {
+  if (nSymbol >= m_Symbols.size() || m_Symbols[nSymbol].relocs == nullptr || nReloc >= m_Symbols[nSymbol].relocs->size()) {
     return false;
   }
 
-  reloc_t reloc = m_Symbols[nSymbol].relocs->at(nReloc);
+  reloc_t const reloc = m_Symbols[nSymbol].relocs->at(nReloc);
 
   strncpy(str, reloc.name, nMaxChars);
   return true;
@@ -123,7 +123,7 @@ void CSignatureFile::ReadStrippedWord(uint8_t *dst, const uint8_t *src, int relT
 //     }
 // }
 
-bool CSignatureFile::TestSymbol(size_t nSymbol, const uint8_t *buffer) {
+auto CSignatureFile::TestSymbol(size_t nSymbol, const uint8_t *buffer) -> bool {
   if (nSymbol >= m_Symbols.size()) {
     return 0;
   }
@@ -133,7 +133,7 @@ bool CSignatureFile::TestSymbol(size_t nSymbol, const uint8_t *buffer) {
   uint32_t crcA = crc32_begin();
   uint32_t crcB = crc32_begin();
 
-  if (symbol.relocs == NULL) {
+  if (symbol.relocs == nullptr) {
     crc32_read(buffer, min(symbol.size, 8), &crcA);
     crc32_end(&crcA);
 
@@ -150,7 +150,7 @@ bool CSignatureFile::TestSymbol(size_t nSymbol, const uint8_t *buffer) {
   size_t offset = 0;
 
   auto reloc = symbol.relocs->begin();
-  uint32_t crcA_limit = min(symbol.size, 8);
+  uint32_t const crcA_limit = min(symbol.size, 8);
 
   while (offset < crcA_limit && reloc != symbol.relocs->end()) {
     if (offset < reloc->offset) {
@@ -206,27 +206,27 @@ bool CSignatureFile::TestSymbol(size_t nSymbol, const uint8_t *buffer) {
   return (symbol.crcB == crcB);
 }
 
-bool CSignatureFile::RelocOffsetCompare(const reloc_t &a, const reloc_t &b) { return a.offset < b.offset; }
+auto CSignatureFile::RelocOffsetCompare(const reloc_t &a, const reloc_t &b) -> bool { return a.offset < b.offset; }
 
 void CSignatureFile::SortRelocationsByOffset() {
   for (auto symbol : m_Symbols) {
-    if (symbol.relocs != NULL) {
+    if (symbol.relocs != nullptr) {
       std::sort(symbol.relocs->begin(), symbol.relocs->end(), RelocOffsetCompare);
     }
   }
 }
 
-int CSignatureFile::GetRelocationDirectiveValue(const char *str) {
+auto CSignatureFile::GetRelocationDirectiveValue(const char *str) -> int {
   if (strcmp(".targ26", str) == 0) return R_MIPS_26;
   if (strcmp(".hi16", str) == 0) return R_MIPS_HI16;
   if (strcmp(".lo16", str) == 0) return R_MIPS_LO16;
   return -1;
 }
 
-bool CSignatureFile::LoadFromMemory(const char *contents) {
-  if (m_Buffer != NULL) {
+auto CSignatureFile::LoadFromMemory(const char *contents) -> bool {
+  if (m_Buffer != nullptr) {
     delete[] m_Buffer;
-    m_Buffer = NULL;
+    m_Buffer = nullptr;
     m_Size = 0;
   }
 
@@ -241,10 +241,10 @@ bool CSignatureFile::LoadFromMemory(const char *contents) {
   return true;
 }
 
-bool CSignatureFile::Load(const char *path) {
-  if (m_Buffer != NULL) {
+auto CSignatureFile::Load(const char *path) -> bool {
+  if (m_Buffer != nullptr) {
     delete[] m_Buffer;
-    m_Buffer = NULL;
+    m_Buffer = nullptr;
     m_Size = 0;
   }
 
@@ -255,9 +255,9 @@ bool CSignatureFile::Load(const char *path) {
     return false;
   }
 
-  file.seekg(0, file.end);
+  file.seekg(0, std::ifstream::end);
   m_Size = file.tellg();
-  file.seekg(0, file.beg);
+  file.seekg(0, std::ifstream::beg);
   m_Buffer = new char[m_Size];
   file.read(m_Buffer, m_Size);
 
@@ -268,47 +268,47 @@ bool CSignatureFile::Load(const char *path) {
 }
 
 void CSignatureFile::Parse() {
-  const char *token;
-  while ((token = GetNextToken())) {
+  const char *token = nullptr;
+  while ((token = GetNextToken()) != nullptr) {
   top_level:
 
     if (token[0] == '.') {
       // relocation directive
-      int relocType = GetRelocationDirectiveValue(token);
+      int const relocType = GetRelocationDirectiveValue(token);
       if (relocType == -1) {
         printf("error: invalid relocation directive '%s'\n", token);
         goto errored;
       }
 
-      if (m_Symbols.size() == 0) {
+      if (m_Symbols.empty()) {
         printf("error: no symbol defined for this relocation directive\n");
       }
 
       const char *relName = GetNextToken();
 
-      if (m_Symbols.back().relocs == NULL) {
+      if (m_Symbols.back().relocs == nullptr) {
         m_Symbols.back().relocs = new std::vector<reloc_t>;
       }
 
-      while ((token = GetNextToken())) {
-        uint32_t offset;
+      while ((token = GetNextToken()) != nullptr) {
+        uint32_t offset = 0;
         if (!ParseNumber(token, &offset)) {
           goto top_level;
         }
 
-        m_Symbols.back().relocs->push_back({relName, (uint8_t)relocType, offset});
+        m_Symbols.back().relocs->push_back({relName, static_cast<uint8_t>(relocType), offset});
       }
 
       continue;
     }
 
-    if (!isalpha(token[0]) && token[0] != '_') {
+    if ((isalpha(token[0]) == 0) && token[0] != '_') {
       printf("error: unexpected '%s'\n", token);
       goto errored;
     }
 
     symbol_info_t symbolInfo;
-    symbolInfo.relocs = NULL;
+    symbolInfo.relocs = nullptr;
     symbolInfo.name = token;
 
     const char *szSize = GetNextToken();
@@ -326,9 +326,9 @@ void CSignatureFile::Parse() {
 errored:;
 }
 
-bool CSignatureFile::IsEOF() { return (m_Pos >= m_Size); }
+auto CSignatureFile::IsEOF() -> bool const { return (m_Pos >= m_Size); }
 
-bool CSignatureFile::AtEndOfLine() {
+auto CSignatureFile::AtEndOfLine() -> bool {
   while (!IsEOF() && (m_Buffer[m_Pos] == ' ' || m_Buffer[m_Pos] == '\t' || m_Buffer[m_Pos] == '\r')) {
     m_Pos++;
   }
@@ -337,7 +337,7 @@ bool CSignatureFile::AtEndOfLine() {
 }
 
 void CSignatureFile::SkipWhitespace() {
-  while (!IsEOF() && isspace(m_Buffer[m_Pos])) {
+  while (!IsEOF() && (isspace(m_Buffer[m_Pos]) != 0)) {
     m_Pos++;
   }
 
@@ -346,26 +346,26 @@ void CSignatureFile::SkipWhitespace() {
       m_Pos++;
     }
 
-    while (!IsEOF() && isspace(m_Buffer[m_Pos])) {
+    while (!IsEOF() && (isspace(m_Buffer[m_Pos]) != 0)) {
       m_Pos++;
     }
   }
 }
 
-char *CSignatureFile::GetNextToken() {
+auto CSignatureFile::GetNextToken() -> char * {
   if (IsEOF()) {
-    return NULL;
+    return nullptr;
   }
 
   SkipWhitespace();
 
   if (IsEOF()) {
-    return NULL;
+    return nullptr;
   }
 
-  size_t tokenPos = m_Pos;
+  size_t const tokenPos = m_Pos;
 
-  while (!IsEOF() && !isspace(m_Buffer[m_Pos])) {
+  while (!IsEOF() && (isspace(m_Buffer[m_Pos]) == 0)) {
     m_Pos++;
   }
 
@@ -374,8 +374,8 @@ char *CSignatureFile::GetNextToken() {
   return &m_Buffer[tokenPos];
 }
 
-bool CSignatureFile::ParseNumber(const char *str, uint32_t *result) {
-  char *endp;
+auto CSignatureFile::ParseNumber(const char *str, uint32_t *result) -> bool {
+  char *endp = nullptr;
   *result = strtoull(str, &endp, 0);
-  return (size_t)(endp - str) == strlen(str);
+  return static_cast<size_t>(endp - str) == strlen(str);
 }

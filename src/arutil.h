@@ -13,14 +13,14 @@
 #ifndef ARUTIL_H
 #define ARUTIL_H
 
-#include <stdint.h>
-#include <stdlib.h>
+#include <cstdint>
+#include <cstdlib>
 
 #define AR_FILE_SIG "!<arch>\n"
 #define AR_FILE_SIG_LEN 8
 
 class CArReader {
-  typedef struct {
+  using ar_header_t = struct {
     char szIdentifier[16];
     char szTimestamp[12];
     char szOwnerId[6];
@@ -28,7 +28,7 @@ class CArReader {
     char szFileMode[8];
     char szSize[10];
     char szEndChar[2];
-  } ar_header_t;
+  };
 
   char* m_CurRealIdentifier;
   char* m_ExIdentifierBlock;
@@ -39,18 +39,18 @@ class CArReader {
   size_t m_Size;
   size_t m_CurPos;
 
-  static char* ArTrimIdentifier(char* str);
+  static auto ArTrimIdentifier(char* str) -> char*;
 
  public:
   CArReader();
   ~CArReader();
 
-  bool Load(const char* path);
+  auto Load(const char* path) -> bool;
 
-  bool SeekNextBlock();
-  const char* GetBlockIdentifier();
-  uint8_t* GetBlockData();
-  size_t GetBlockSize();
+  auto SeekNextBlock() -> bool;
+  auto GetBlockIdentifier() -> const char* const;
+  auto GetBlockData() -> uint8_t*;
+  auto GetBlockSize() -> size_t const;
 };
 
 #endif  // ARUTIL_H

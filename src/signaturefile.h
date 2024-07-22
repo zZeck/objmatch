@@ -14,19 +14,19 @@
 
 class CSignatureFile {
  private:
-  typedef struct {
+  using reloc_t = struct {
     const char *name;
     uint8_t type;
     uint32_t offset;
-  } reloc_t;
+  };
 
-  typedef struct {
+  using symbol_info_t = struct {
     const char *name;
     uint32_t size;
     uint32_t crcA;
     uint32_t crcB;
     std::vector<reloc_t> *relocs;
-  } symbol_info_t;
+  };
 
   char *m_Buffer;
   size_t m_Size;
@@ -34,34 +34,34 @@ class CSignatureFile {
 
   std::vector<symbol_info_t> m_Symbols;
 
-  static bool ParseNumber(const char *str, uint32_t *result);
-  static int GetRelocationDirectiveValue(const char *str);
-  static bool RelocOffsetCompare(const reloc_t &a, const reloc_t &b);
+  static auto ParseNumber(const char *str, uint32_t *result) -> bool;
+  static auto GetRelocationDirectiveValue(const char *str) -> int;
+  static auto RelocOffsetCompare(const reloc_t &a, const reloc_t &b) -> bool;
   static void ReadStrippedWord(uint8_t *dst, const uint8_t *src, int relType);
 
   void SkipWhitespace();
-  char *GetNextToken();
-  bool AtEndOfLine();
+  auto GetNextToken() -> char *;
+  auto AtEndOfLine() -> bool;
   void Parse();
-  bool IsEOF();
+  auto IsEOF() -> bool const;
 
   void SortRelocationsByOffset();
 
  public:
   CSignatureFile();
   ~CSignatureFile();
-  bool Load(const char *path);
-  bool LoadFromMemory(const char *contents);
-  size_t GetNumSymbols();
-  uint32_t GetSymbolSize(size_t nSymbol);
-  bool GetSymbolName(size_t nSymbol, char *str, size_t nMaxChars);
-  bool TestSymbol(size_t nSymbol, const uint8_t *buffer);
+  auto Load(const char *path) -> bool;
+  auto LoadFromMemory(const char *contents) -> bool;
+  auto GetNumSymbols() -> size_t;
+  auto GetSymbolSize(size_t nSymbol) -> uint32_t;
+  auto GetSymbolName(size_t nSymbol, char *str, size_t nMaxChars) -> bool;
+  auto TestSymbol(size_t nSymbol, const uint8_t *buffer) -> bool;
 
   // relocs
-  size_t GetNumRelocs(size_t nSymbol);
-  bool GetRelocName(size_t nSymbol, size_t nReloc, char *str, size_t nMaxChars);
-  uint8_t GetRelocType(size_t nSymbol, size_t nReloc);
-  uint32_t GetRelocOffset(size_t nSymbol, size_t nReloc);
+  auto GetNumRelocs(size_t nSymbol) -> size_t;
+  auto GetRelocName(size_t nSymbol, size_t nReloc, char *str, size_t nMaxChars) -> bool;
+  auto GetRelocType(size_t nSymbol, size_t nReloc) -> uint8_t;
+  auto GetRelocOffset(size_t nSymbol, size_t nReloc) -> uint32_t;
 };
 
 #endif  // SIGNATUREFILE_H

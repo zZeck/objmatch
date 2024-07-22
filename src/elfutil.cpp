@@ -14,28 +14,28 @@
 
 #include "elfutil.h"
 
-#include <stdint.h>
+#include <cstdint>
 
 #include <fstream>
 
-CElfContext::CElfContext() : m_Buffer(NULL), m_Size(0) {}
+CElfContext::CElfContext() : m_Buffer(nullptr), m_Size(0) {}
 
-bool CElfContext::Load(const char* path) {
+auto CElfContext::Load(const char* path) -> bool {
   std::ifstream file;
   file.open(path, std::ifstream::binary);
   if (!file.is_open()) {
     return false;
   }
-  file.seekg(0, file.end);
+  file.seekg(0, std::ifstream::end);
   m_Size = file.tellg();
-  file.seekg(0, file.beg);
+  file.seekg(0, std::ifstream::beg);
   m_Buffer = new uint8_t[m_Size];
-  file.read((char*)m_Buffer, m_Size);
+  file.read(reinterpret_cast<char*>(m_Buffer), m_Size);
   return true;
 }
 
-bool CElfContext::LoadFromMemory(uint8_t* buffer, size_t size) {
-  if (m_Buffer != NULL) {
+auto CElfContext::LoadFromMemory(uint8_t* buffer, size_t size) -> bool {
+  if (m_Buffer != nullptr) {
     delete[] m_Buffer;
   }
 
@@ -48,40 +48,40 @@ bool CElfContext::LoadFromMemory(uint8_t* buffer, size_t size) {
 
 //////////////
 
-CElfSection* CElfContext::Section(int index) {
+auto CElfContext::Section(int index) -> CElfSection* {
   if (index >= NumSections()) {
-    return NULL;
+    return nullptr;
   }
 
-  uint32_t offset = SectionHeaderOffset() + index * SectionHeaderEntrySize();
+  uint32_t const offset = SectionHeaderOffset() + index * SectionHeaderEntrySize();
 
   if (offset >= Size()) {
-    return NULL;
+    return nullptr;
   }
 
-  return (CElfSection*)((char*)m_Buffer + offset);
+  return reinterpret_cast<CElfSection*>(reinterpret_cast<char*>(m_Buffer) + offset);
 }
 
-CElfSection* CElfContext::Section(const char* name) {
-  int nsecs = NumSections();
+auto CElfContext::Section(const char* name) -> CElfSection* {
+  int const nsecs = NumSections();
   for (int i = 0; i < nsecs; i++) {
     CElfSection* sec = Section(i);
     const char* curName = sec->Name(this);
 
-    if (curName != NULL && strcmp(curName, name) == 0) {
+    if (curName != nullptr && strcmp(curName, name) == 0) {
       return sec;
     }
   }
-  return NULL;
+  return nullptr;
 }
 
-bool CElfContext::SectionIndexOf(const char* name, int* index) {
-  int nsecs = NumSections();
+auto CElfContext::SectionIndexOf(const char* name, int* index) -> bool {
+  int const nsecs = NumSections();
   for (int i = 0; i < nsecs; i++) {
     CElfSection* sec = Section(i);
     const char* curName = sec->Name(this);
 
-    if (curName != NULL && strcmp(sec->Name(this), name) == 0) {
+    if (curName != nullptr && strcmp(sec->Name(this), name) == 0) {
       *index = i;
       return true;
     }
@@ -89,85 +89,85 @@ bool CElfContext::SectionIndexOf(const char* name, int* index) {
   return false;
 }
 
-int CElfContext::NumSymbols() {
+auto CElfContext::NumSymbols() -> int {
   CElfSection* sym_sec = Section(".symtab");
-  if (sym_sec == NULL) {
+  if (sym_sec == nullptr) {
     return 0;
   }
   return sym_sec->Size() / sizeof(CElfSymbol);
 }
 
-int CElfContext::NumTextRelocations() {
+auto CElfContext::NumTextRelocations() -> int {
   CElfSection* rel_text_sec = Section(".rel.text");
-  if (rel_text_sec == NULL) {
+  if (rel_text_sec == nullptr) {
     return 0;
   }
   return rel_text_sec->Size() / sizeof(CElfRelocation);
 }
 
-CElfRelocation* CElfContext::TextRelocation(int index) {
+auto CElfContext::TextRelocation(int index) -> CElfRelocation* {
   CElfSection* rel_text_sec = Section(".rel.text");
-  if (rel_text_sec == NULL) {
-    return NULL;
+  if (rel_text_sec == nullptr) {
+    return nullptr;
   }
   return (CElfRelocation*)(rel_text_sec->Data(this) + (index * sizeof(CElfRelocation)));
 }
 
-CElfSymbol* CElfContext::Symbol(int index) {
+auto CElfContext::Symbol(int index) -> CElfSymbol* {
   CElfSection* sym_sec = Section(".symtab");
-  if (sym_sec == NULL) {
-    return NULL;
+  if (sym_sec == nullptr) {
+    return nullptr;
   }
   return (CElfSymbol*)(sym_sec->Data(this) + (index * sizeof(CElfSymbol)));
 }
 
 //////////////
 
-const char* CElfSection::Name(CElfContext* elf) {
+auto CElfSection::Name(CElfContext* elf) -> const char* {
   CElfSection* shstr_sec = elf->Section(elf->SectionNamesIndex());
 
-  if (shstr_sec == NULL) {
-    return NULL;
+  if (shstr_sec == nullptr) {
+    return nullptr;
   }
 
-  uint32_t nameOffset = NameOffset();
+  uint32_t const nameOffset = NameOffset();
 
   if (nameOffset >= shstr_sec->Size()) {
-    return NULL;
+    return nullptr;
   }
 
   if (shstr_sec->Offset() + nameOffset >= elf->Size()) {
-    return NULL;
+    return nullptr;
   }
 
   const char* shstr_data = shstr_sec->Data(elf);
   return &shstr_data[NameOffset()];
 }
 
-const char* CElfSection::Data(CElfContext* elf) {
-  uint32_t offset = Offset();
+auto CElfSection::Data(CElfContext* elf) -> const char* {
+  uint32_t const offset = Offset();
 
   if (offset >= elf->Size()) {
-    return NULL;
+    return nullptr;
   }
 
-  return ((char*)elf->Header()) + Offset();
+  return (reinterpret_cast<char*>(elf->Header())) + Offset();
 }
 
 //////////////
 
-const char* CElfSymbol::Name(CElfContext* elf) {
+auto CElfSymbol::Name(CElfContext* elf) -> const char* {
   CElfSection* str_sec = elf->Section(".strtab");
 
-  if (str_sec == NULL) {
-    return 0;
+  if (str_sec == nullptr) {
+    return nullptr;
   }
 
-  return (const char*)str_sec->Data(elf) + NameOffset();
+  return str_sec->Data(elf) + NameOffset();
 }
 
-CElfSection* CElfSymbol::Section(CElfContext* elf) { return elf->Section(SectionIndex()); }
+auto CElfSymbol::Section(CElfContext* elf) -> const CElfSection* { return elf->Section(SectionIndex()); }
 
 //////////////
 
-CElfSymbol* CElfRelocation::Symbol(CElfContext* elf) { return elf->Symbol(SymbolIndex()); }
+auto CElfRelocation::Symbol(CElfContext* elf) -> CElfSymbol* { return elf->Symbol(SymbolIndex()); }

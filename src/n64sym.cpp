@@ -30,7 +30,7 @@ CN64Sym::n64sym_fmt_lut_t CN64Sym::FormatNames[] = {{"default", N64SYM_FMT_DEFAU
                                                     {"armips", N64SYM_FMT_ARMIPS},   {"n64split", N64SYM_FMT_N64SPLIT}, {"splat", N64SYM_FMT_SPLAT}};
 
 CN64Sym::CN64Sym()
-    : m_Binary(NULL),
+    : m_Binary(nullptr),
       m_BinarySize(0),
       m_HeaderSize(0x80000000),
       m_bVerbose(false),
@@ -45,13 +45,13 @@ CN64Sym::CN64Sym()
 }
 
 CN64Sym::~CN64Sym() {
-  if (m_Binary != NULL) {
+  
     delete[] m_Binary;
-  }
+  
 }
 
-bool CN64Sym::LoadBinary(const char* binPath) {
-  if (m_Binary != NULL) {
+auto CN64Sym::LoadBinary(const char* binPath) -> bool {
+  if (m_Binary != nullptr) {
     delete[] m_Binary;
     m_BinarySize = 0;
   }
@@ -63,12 +63,12 @@ bool CN64Sym::LoadBinary(const char* binPath) {
     return false;
   }
 
-  file.seekg(0, file.end);
+  file.seekg(0, std::ifstream::end);
   m_BinarySize = file.tellg();
   m_Binary = new uint8_t[m_BinarySize];
 
-  file.seekg(0, file.beg);
-  file.read((char*)m_Binary, m_BinarySize);
+  file.seekg(0, std::ifstream::beg);
+  file.read(reinterpret_cast<char*>(m_Binary), m_BinarySize);
 
   if (PathIsN64Rom(binPath) && !m_bOverrideHeaderSize) {
     if (m_BinarySize < 0x101000) {
@@ -77,24 +77,24 @@ bool CN64Sym::LoadBinary(const char* binPath) {
       return false;
     }
 
-    uint32_t endianCheck = bswap32(*(uint32_t*)&m_Binary[0x00]);
+    uint32_t const endianCheck = bswap32(*reinterpret_cast<uint32_t*>(&m_Binary[0x00]));
 
     switch (endianCheck) {
       case 0x80371240:
         break;
       case 0x40123780:
         for (size_t i = 0; i < m_BinarySize; i += sizeof(uint32_t)) {
-          *(uint32_t*)&m_Binary[i] = bswap32(*(uint32_t*)&m_Binary[i]);
+          *reinterpret_cast<uint32_t*>(&m_Binary[i]) = bswap32(*reinterpret_cast<uint32_t*>(&m_Binary[i]));
         }
         break;
       case 0x37804012:
         for (size_t i = 0; i < m_BinarySize; i += sizeof(uint16_t)) {
-          *(uint16_t*)&m_Binary[i] = bswap16(*(uint16_t*)&m_Binary[i]);
+          *reinterpret_cast<uint16_t*>(&m_Binary[i]) = bswap16(*reinterpret_cast<uint16_t*>(&m_Binary[i]));
         }
         break;
     }
 
-    uint32_t entryPoint = bswap32(*(uint32_t*)&m_Binary[0x08]);
+    uint32_t entryPoint = bswap32(*reinterpret_cast<uint32_t*>(&m_Binary[0x08]));
 
     uint32_t bootCheck = crc32_begin();
     crc32_read(&m_Binary[0x40], 0xFC0, &bootCheck);
@@ -123,10 +123,10 @@ void CN64Sym::UseBuiltinSignatures(bool bUseBuiltinSignatures) { m_bUseBuiltinSi
 
 void CN64Sym::SetThoroughScan(bool bThoroughScan) { m_bThoroughScan = bThoroughScan; }
 
-bool CN64Sym::SetOutputFormat(const char* fmtName) {
-  for (size_t i = 0; i < sizeof(FormatNames) / sizeof(FormatNames[0]); i++) {
-    if (strcmp(FormatNames[i].name, fmtName) == 0) {
-      m_OutputFormat = FormatNames[i].fmt;
+auto CN64Sym::SetOutputFormat(const char* fmtName) -> bool {
+  for (auto & FormatName : FormatNames) {
+    if (strcmp(FormatName.name, fmtName) == 0) {
+      m_OutputFormat = FormatName.fmt;
       return true;
     }
   }
@@ -135,7 +135,7 @@ bool CN64Sym::SetOutputFormat(const char* fmtName) {
   return false;
 }
 
-bool CN64Sym::SetOutputPath(const char* path) {
+auto CN64Sym::SetOutputPath(const char* path) -> bool {
   m_OutputFile.open(path, std::ofstream::binary);
 
   if (!m_OutputFile.is_open()) {
@@ -152,25 +152,25 @@ void CN64Sym::SetHeaderSize(uint32_t headerSize) {
   m_HeaderSize = headerSize;
 }
 
-bool CN64Sym::Run() {
-  if (m_Binary == NULL) {
+auto CN64Sym::Run() -> bool {
+  if (m_Binary == nullptr) {
     return false;
   }
 
   m_LikelyFunctionOffsets.clear();
 
   for (size_t i = 0; i < m_BinarySize; i += sizeof(uint32_t)) {
-    uint32_t word = bswap32(*(uint32_t*)&m_Binary[i]);
+    uint32_t const word = bswap32(*reinterpret_cast<uint32_t*>(&m_Binary[i]));
 
     // JR RA (+ 8)
     if (word == 0x03E00008) {
-      if (*(uint32_t*)&m_Binary[i + 8] != 0x00000000) {
+      if (*reinterpret_cast<uint32_t*>(&m_Binary[i + 8]) != 0x00000000) {
         m_LikelyFunctionOffsets.insert(i + 8);
       }
     }
 
     // ADDIU SP, SP, -n
-    if ((word & 0xFFFF0000) == 0x27BD0000 && (int16_t)(word & 0xFFFF) < 0) {
+    if ((word & 0xFFFF0000) == 0x27BD0000 && static_cast<int16_t>(word & 0xFFFF) < 0) {
       m_LikelyFunctionOffsets.insert(i);
     }
 
@@ -183,8 +183,8 @@ bool CN64Sym::Run() {
     ProcessSignatureFile(m_BuiltinSigs);
   }
 
-  for (size_t i = 0; i < m_LibPaths.size(); i++) {
-    ScanRecursive(m_LibPaths.at(i));
+  for (auto & m_LibPath : m_LibPaths) {
+    ScanRecursive(m_LibPath);
   }
 
   SortResults();
@@ -239,16 +239,16 @@ void CN64Sym::ScanRecursive(const char* path) {
     ProcessFile(path);
     return;
   }
-  DIR* dir;
+  DIR* dir = nullptr;
   dir = opendir(path);
-  if (dir == NULL) {
+  if (dir == nullptr) {
     printf("%s is neither a directory or file with symbols.\n", path);
     return;
   }
-  struct dirent* entry;
-  while ((entry = readdir(dir)) != NULL) {
+  struct dirent* entry = nullptr;
+  while ((entry = readdir(dir)) != nullptr) {
     char next_path[PATH_MAX];
-    if (!entry->d_name) continue;
+    if (entry->d_name == nullptr) continue;
     snprintf(next_path, sizeof(next_path), "%s/%s", path, entry->d_name);
     switch (entry->d_type) {
       case DT_DIR:
@@ -296,7 +296,7 @@ void CN64Sym::ProcessLibrary(const char* path) {
     }
 
     // worker thread will delete objProcessingCtx after it's done
-    obj_processing_context_t* objProcessingCtx = new obj_processing_context_t;
+    auto* objProcessingCtx = new obj_processing_context_t;
     objProcessingCtx->mt_this = this;
     objProcessingCtx->libraryPath = path;
     objProcessingCtx->blockIdentifier = ar.GetBlockIdentifier();
@@ -310,8 +310,8 @@ void CN64Sym::ProcessLibrary(const char* path) {
 }
 
 void CN64Sym::ProcessObject(const char* path) {
-  uint8_t* buffer;
-  size_t size;
+  uint8_t* buffer = nullptr;
+  size_t size = 0;
 
   std::ifstream file;
   file.open(path, std::ifstream::binary);
@@ -320,18 +320,18 @@ void CN64Sym::ProcessObject(const char* path) {
     return;
   }
 
-  file.seekg(0, file.end);
+  file.seekg(0, std::ifstream::end);
   size = file.tellg();
   buffer = new uint8_t[size];
 
-  file.seekg(0, file.beg);
-  file.read((char*)buffer, size);
+  file.seekg(0, std::ifstream::beg);
+  file.read(reinterpret_cast<char*>(buffer), size);
 
   Log("%s\n", path);
 
   obj_processing_context_t objProcessingCtx;
-  objProcessingCtx.mt_this = NULL;
-  objProcessingCtx.libraryPath = NULL;
+  objProcessingCtx.mt_this = nullptr;
+  objProcessingCtx.libraryPath = nullptr;
   objProcessingCtx.blockIdentifier = path;
   objProcessingCtx.blockData = buffer;
   objProcessingCtx.blockSize = size;
@@ -347,30 +347,30 @@ void CN64Sym::ProcessObject(obj_processing_context_t* objProcessingCtx) {
 
   CElfSection* textSec = elf.Section(".text");
 
-  if (textSec == NULL) {
+  if (textSec == nullptr) {
     return;
   }
 
   const char* textBuf = textSec->Data(&elf);
-  uint32_t textSize = textSec->Size();
+  uint32_t const textSize = textSec->Size();
 
-  uint32_t endAddress = m_BinarySize - textSize;
+  uint32_t const endAddress = m_BinarySize - textSize;
 
-  bool bHaveFullMatch;
-  uint32_t matchedAddress;
-  int nBytesMatched;
+  bool bHaveFullMatch = false;
+  uint32_t matchedAddress = 0;
+  int nBytesMatched = 0;
   int bestPartialMatchLength = 0;
-  const char* matchedBlock = NULL;
+  const char* matchedBlock = nullptr;
 
   for (uint32_t blockAddress = 0; blockAddress < endAddress; blockAddress += sizeof(uint32_t)) {
-    const char* block = (const char*)&m_Binary[blockAddress];
+    const char* block = reinterpret_cast<const char*>(&m_Binary[blockAddress]);
     bHaveFullMatch = TestElfObjectText(&elf, block, &nBytesMatched);
 
     if (bHaveFullMatch) {
       matchedBlock = block;
       matchedAddress = blockAddress;
       break;
-    } else if (nBytesMatched > bestPartialMatchLength) {
+    } if (nBytesMatched > bestPartialMatchLength) {
       matchedBlock = block;
       matchedAddress = blockAddress;
       bestPartialMatchLength = nBytesMatched;
@@ -395,11 +395,11 @@ void CN64Sym::ProcessObject(obj_processing_context_t* objProcessingCtx) {
   }
 
   for (size_t i = 0; i < textSize; i += 4) {
-    uint32_t buffOp = bswap32(*(uint32_t*)&matchedBlock[i]);
-    uint32_t textOp = bswap32(*(uint32_t*)&textBuf[i]);
+    uint32_t const buffOp = bswap32(*(uint32_t*)&matchedBlock[i]);
+    uint32_t const textOp = bswap32(*(uint32_t*)&textBuf[i]);
 
-    CElfRelocation* relocation = NULL;
-    CElfSymbol* symbol = NULL;
+    CElfRelocation* relocation = nullptr;
+    CElfSymbol* symbol = nullptr;
     bool bHaveRel = false;
 
     for (int j = 0; j < elf.NumTextRelocations(); j++) {
@@ -419,15 +419,15 @@ void CN64Sym::ProcessObject(obj_processing_context_t* objProcessingCtx) {
   m_ThreadPool.UnlockDefaultMutex();
 }
 
-void* CN64Sym::ProcessObjectProc(void* _objProcessingCtx) {
-  obj_processing_context_t* objProcessingCtx = (obj_processing_context_t*)_objProcessingCtx;
+auto CN64Sym::ProcessObjectProc(void* _objProcessingCtx) -> void* {
+  auto* objProcessingCtx = static_cast<obj_processing_context_t*>(_objProcessingCtx);
   CN64Sym* _this = objProcessingCtx->mt_this;
 
   _this->ProcessObject(objProcessingCtx);
 
   delete objProcessingCtx;
 
-  return NULL;
+  return nullptr;
 }
 
 void CN64Sym::ProcessSignatureFile(const char* path) {
@@ -439,19 +439,19 @@ void CN64Sym::ProcessSignatureFile(const char* path) {
 }
 
 void CN64Sym::ProcessSignatureFile(CSignatureFile& sigFile) {
-  size_t numSymbols = sigFile.GetNumSymbols();
+  size_t const numSymbols = sigFile.GetNumSymbols();
 
   const char* statusDescription = "(built-in signatures)";
   int percentDone = 0;
   int statusLineLen = printf("[  0%%] %s", statusDescription);
 
   for (size_t nSymbol = 0; nSymbol < numSymbols; nSymbol++) {
-    uint32_t symbolSize = sigFile.GetSymbolSize(nSymbol);
-    uint32_t endOffset = m_BinarySize - symbolSize;
+    uint32_t const symbolSize = sigFile.GetSymbolSize(nSymbol);
+    uint32_t const endOffset = m_BinarySize - symbolSize;
     char symbolName[128];
     sigFile.GetSymbolName(nSymbol, symbolName, sizeof(symbolName));
 
-    int percentNow = (int)(((float)nSymbol / numSymbols) * 100);
+    int const percentNow = static_cast<int>((static_cast<float>(nSymbol) / numSymbols) * 100);
     if (percentNow > percentDone) {
       ClearLine(statusLineLen);
       statusLineLen = printf("[%3d%%] %s", percentDone, statusDescription);
@@ -478,16 +478,17 @@ void CN64Sym::ProcessSignatureFile(CSignatureFile& sigFile) {
   ClearLine(statusLineLen);
 }
 
-bool CN64Sym::TestElfObjectText(CElfContext* elf, const char* data, int* nBytesMatched) {
-  CElfSection *text_sec, *rel_text_sec;
-  CElfRelocation* text_relocations;
-  const char* text_sec_data;
-  uint32_t text_sec_size;
-  int num_text_relocations;
+auto CN64Sym::TestElfObjectText(CElfContext* elf, const char* data, int* nBytesMatched) -> bool {
+  CElfSection *text_sec = nullptr;
+  CElfSection *rel_text_sec = nullptr;
+  CElfRelocation* text_relocations = nullptr;
+  const char* text_sec_data = nullptr;
+  uint32_t text_sec_size = 0;
+  int num_text_relocations = 0;
 
   text_sec = elf->Section(".text");
 
-  if (text_sec == NULL) {
+  if (text_sec == nullptr) {
     *nBytesMatched = 0;
     return false;
   }
@@ -560,7 +561,7 @@ bool CN64Sym::TestElfObjectText(CElfContext* elf, const char* data, int* nBytesM
   return true;
 }
 
-bool CN64Sym::TestSignatureSymbol(CSignatureFile& sigFile, size_t nSymbol, uint32_t offset) {
+auto CN64Sym::TestSignatureSymbol(CSignatureFile& sigFile, size_t nSymbol, uint32_t offset) -> bool {
   typedef struct {
     uint32_t address;
     bool haveHi16;
@@ -579,22 +580,22 @@ bool CN64Sym::TestSignatureSymbol(CSignatureFile& sigFile, size_t nSymbol, uint3
     for (size_t nReloc = 0; nReloc < sigFile.GetNumRelocs(nSymbol); nReloc++) {
       char relocName[128];
       sigFile.GetRelocName(nSymbol, nReloc, relocName, sizeof(relocName));
-      uint8_t relocType = sigFile.GetRelocType(nSymbol, nReloc);
-      uint32_t relocOffset = sigFile.GetRelocOffset(nSymbol, nReloc);
+      uint8_t const relocType = sigFile.GetRelocType(nSymbol, nReloc);
+      uint32_t const relocOffset = sigFile.GetRelocOffset(nSymbol, nReloc);
 
-      uint32_t opcode = bswap32(*(uint32_t*)&m_Binary[offset + relocOffset]);
+      uint32_t const opcode = bswap32(*reinterpret_cast<uint32_t*>(&m_Binary[offset + relocOffset]));
 
       switch (relocType) {
         case R_MIPS_HI16:
-          if (relocMap.count(relocName) == 0) {
+          if (!relocMap.contains(relocName)) {
             relocMap[relocName].haveHi16 = true;
             relocMap[relocName].haveLo16 = false;
           }
           relocMap[relocName].address = (opcode & 0x0000FFFF) << 16;
           break;
         case R_MIPS_LO16:
-          if (relocMap.count(relocName) != 0) {
-            relocMap[relocName].address += (int16_t)(opcode & 0x0000FFFF);
+          if (relocMap.contains(relocName)) {
+            relocMap[relocName].address += static_cast<int16_t>(opcode & 0x0000FFFF);
           } else {
             printf("missing hi16?");
             exit(0);
@@ -629,8 +630,8 @@ void CN64Sym::TallyNumSymbolsToCheck() {
     m_NumSymbolsToCheck += m_BuiltinSigs.GetNumSymbols();
   }
 
-  for (size_t i = 0; i < m_LibPaths.size(); i++) {
-    CountSymbolsRecursive(m_LibPaths.at(i));
+  for (auto & m_LibPath : m_LibPaths) {
+    CountSymbolsRecursive(m_LibPath);
   }
 }
 
@@ -661,9 +662,9 @@ void CN64Sym::CountSymbolsInFile(const char* path) {
   }
 }
 
-size_t CN64Sym::CountGlobalSymbolsInElf(CElfContext& elf) {
+auto CN64Sym::CountGlobalSymbolsInElf(CElfContext& elf) -> size_t {
   size_t count = 0;
-  int numSymbols = elf.NumSymbols();
+  int const numSymbols = elf.NumSymbols();
 
   for (int i = 0; i < numSymbols; i++) {
     CElfSymbol* symbol = elf.Symbol(i);
@@ -679,16 +680,16 @@ void CN64Sym::CountSymbolsRecursive(const char* path) {
     CountSymbolsInFile(path);
     return;
   }
-  DIR* dir;
+  DIR* dir = nullptr;
   dir = opendir(path);
-  if (dir == NULL) {
+  if (dir == nullptr) {
     printf("%s is neither a directory or file with symbols.\n", path);
     return;
   }
-  struct dirent* entry;
-  while ((entry = readdir(dir)) != NULL) {
+  struct dirent* entry = nullptr;
+  while ((entry = readdir(dir)) != nullptr) {
     char next_path[PATH_MAX];
-    if (!entry->d_name) continue;
+    if (entry->d_name == nullptr) continue;
     snprintf(next_path, sizeof(next_path), "%s/%s", path, entry->d_name);
     switch (entry->d_type) {
       case DT_DIR:
@@ -712,7 +713,7 @@ void CN64Sym::CountSymbolsRecursive(const char* path) {
   closedir(dir);
 }
 
-bool CN64Sym::AddResult(search_result_t result) {
+auto CN64Sym::AddResult(search_result_t result) -> bool {
   // todo use map
   if (result.address == 0) {
     return false;
@@ -729,7 +730,7 @@ bool CN64Sym::AddResult(search_result_t result) {
 }
 
 void CN64Sym::AddSymbolResults(CElfContext* elf, uint32_t baseAddress, uint32_t maxTextOffset) {
-  int nSymbols = elf->NumSymbols();
+  int const nSymbols = elf->NumSymbols();
 
   for (int i = nSymbols - 1; i >= 0; i--) {
     CElfSymbol* symbol = elf->Symbol(i);
@@ -753,14 +754,14 @@ void CN64Sym::AddSymbolResults(CElfContext* elf, uint32_t baseAddress, uint32_t 
 void CN64Sym::AddRelocationResults(CElfContext* elf, const char* block, const char* altNamePrefix, int maxTextOffset) {
   Log("Adding relocation results...\n");
 
-  int nRelocations = elf->NumTextRelocations();
+  int const nRelocations = elf->NumTextRelocations();
 
   for (int i = 0; i < nRelocations; i++) {
     CElfRelocation* relocation = elf->TextRelocation(i);
     CElfSymbol* symbol = relocation->Symbol(elf);
-    int textOffset = relocation->Offset();
-    uint32_t opcode = bswap32(*(uint32_t*)&block[textOffset]);
-    uint8_t relType = relocation->Type();
+    int const textOffset = relocation->Offset();
+    uint32_t const opcode = bswap32(*(uint32_t*)&block[textOffset]);
+    uint8_t const relType = relocation->Type();
 
     Log("%s %04X\n", symbol->Name(elf), textOffset);
 
@@ -770,7 +771,7 @@ void CN64Sym::AddRelocationResults(CElfContext* elf, const char* block, const ch
     }
 
     if (relType == R_MIPS_26 && (opcode >> 26) == 0x0C) {
-      uint32_t jalTarget = m_HeaderSize | ((opcode & 0x3FFFFFF) * 4);
+      uint32_t const jalTarget = m_HeaderSize | ((opcode & 0x3FFFFFF) * 4);
 
       search_result_t result;
       result.address = jalTarget;
@@ -780,7 +781,7 @@ void CN64Sym::AddRelocationResults(CElfContext* elf, const char* block, const ch
       if (relocation->SymbolIndex() == 1) {
         // Static function, compiler tossed out the symbol
         // Use object file name and text offset as a replacement
-        int len = sprintf(result.name, "%s_%04X", altNamePrefix, textOffset);
+        int const len = sprintf(result.name, "%s_%04X", altNamePrefix, textOffset);
         for (int i = 0; i < len; i++) {
           if (result.name[i] == '.') {
             result.name[i] = '_';
@@ -795,10 +796,10 @@ void CN64Sym::AddRelocationResults(CElfContext* elf, const char* block, const ch
       CElfRelocation* prevRelocation = elf->TextRelocation(i - 1);
 
       if (prevRelocation->Type() == R_MIPS_HI16) {
-        uint32_t upperOp = bswap32(*(uint32_t*)&block[prevRelocation->Offset()]);
-        uint32_t lowerOp = opcode;
+        uint32_t const upperOp = bswap32(*(uint32_t*)&block[prevRelocation->Offset()]);
+        uint32_t const lowerOp = opcode;
 
-        // TODO: Implement
+        // TODO(zeck): Implement
 
         CElfSymbol* symbol = relocation->Symbol(elf);
         Log("%04X%04X,data,%s\n", upperOp & 0xFFFF, lowerOp & 0xFFFF, symbol->Name(elf));
@@ -807,7 +808,7 @@ void CN64Sym::AddRelocationResults(CElfContext* elf, const char* block, const ch
   }
 }
 
-bool CN64Sym::ResultCmp(search_result_t a, search_result_t b) { return (a.address < b.address); }
+auto CN64Sym::ResultCmp(search_result_t a, search_result_t b) -> bool { return (a.address < b.address); }
 
 void CN64Sym::SortResults() { std::sort(m_Results.begin(), m_Results.end(), ResultCmp); }
 
@@ -817,7 +818,7 @@ void CN64Sym::ClearLine(int nChars) {
   printf("\r");
 }
 
-void CN64Sym::Log(const char* format, ...) {
+void CN64Sym::Log(const char* format, ...) const {
   if (!m_bVerbose) {
     return;
   }
@@ -832,7 +833,7 @@ void CN64Sym::Output(const char* format, ...) {
   va_list args;
   va_start(args, format);
 
-  size_t len = vsnprintf(NULL, 0, format, args);
+  size_t const len = vsnprintf(nullptr, 0, format, args);
   char* str = new char[len + 1];
   va_end(args);
 

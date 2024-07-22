@@ -18,19 +18,18 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #else
-#include <unistd.h>
 #endif
 
-CThreadPool::CThreadPool() {
+CThreadPool::CThreadPool() : m_NumWorkers(GetNumCPUCores()) {
   m_DefaultMutex = PTHREAD_MUTEX_INITIALIZER;
-  m_NumWorkers = GetNumCPUCores();
+  
   m_Workers = new worker_context_t[m_NumWorkers];
   memset(m_Workers, 0, sizeof(worker_context_t) * m_NumWorkers);
 }
 
 CThreadPool::~CThreadPool() { delete[] m_Workers; }
 
-int CThreadPool::GetNumCPUCores() {
+auto CThreadPool::GetNumCPUCores() -> int {
 #ifdef _WIN32
   SYSTEM_INFO info;
   GetSystemInfo(&info);
@@ -40,11 +39,11 @@ int CThreadPool::GetNumCPUCores() {
 #endif
 }
 
-void* CThreadPool::RoutineProc(void* _worker) {
-  worker_context_t* worker = (worker_context_t*)_worker;
+auto CThreadPool::RoutineProc(void* _worker) -> void* {
+  auto* worker = static_cast<worker_context_t*>(_worker);
   worker->routine(worker->param);
   worker->bRunning = false;
-  return NULL;
+  return nullptr;
 }
 
 void CThreadPool::AddWorker(worker_routine_t routine, void* param) {
@@ -52,11 +51,11 @@ void CThreadPool::AddWorker(worker_routine_t routine, void* param) {
     for (int i = 0; i < m_NumWorkers; i++) {
       worker_context_t* worker = &m_Workers[i];
 
-      if (worker->bRunning == false) {
+      if (!worker->bRunning) {
         worker->bRunning = true;
         worker->param = param;
         worker->routine = routine;
-        pthread_create(&worker->pthread, NULL, RoutineProc, (void*)worker);
+        pthread_create(&worker->pthread, nullptr, RoutineProc, (void*)worker);
         return;
       }
     }

@@ -12,13 +12,13 @@
 
 #include "arutil.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 
 #include <fstream>
 
-char* CArReader::ArTrimIdentifier(char* str) {
+auto CArReader::ArTrimIdentifier(char* str) -> char* {
   char* org = str;
 
   while (*str != '\n' && *str != '\0' && *str != '/') {
@@ -29,16 +29,16 @@ char* CArReader::ArTrimIdentifier(char* str) {
   return org;
 }
 
-CArReader::CArReader() : m_CurRealIdentifier(NULL), m_ExIdentifierBlock(NULL), m_CurBlock(NULL), m_CurBlockSize(0), m_Buffer(NULL), m_Size(0), m_CurPos(0) {}
+CArReader::CArReader() : m_CurRealIdentifier(nullptr), m_ExIdentifierBlock(nullptr), m_CurBlock(nullptr), m_CurBlockSize(0), m_Buffer(nullptr), m_Size(0), m_CurPos(0) {}
 
 CArReader::~CArReader() {
-  if (m_Buffer != NULL) {
+  if (m_Buffer != nullptr) {
     delete[] m_Buffer;
   }
 }
 
-bool CArReader::Load(const char* path) {
-  if (m_Buffer != NULL) {
+auto CArReader::Load(const char* path) -> bool {
+  if (m_Buffer != nullptr) {
     delete[] m_Buffer;
     m_CurPos = 0;
     m_Size = 0;
@@ -51,17 +51,17 @@ bool CArReader::Load(const char* path) {
     return false;
   }
 
-  file.seekg(0, file.end);
+  file.seekg(0, std::ifstream::end);
   m_Size = file.tellg();
 
-  file.seekg(0, file.beg);
+  file.seekg(0, std::ifstream::beg);
   m_Buffer = new uint8_t[m_Size];
-  file.read((char*)m_Buffer, m_Size);
+  file.read(reinterpret_cast<char*>(m_Buffer), m_Size);
 
   if (memcmp(AR_FILE_SIG, m_Buffer, AR_FILE_SIG_LEN) == 0) {
     m_CurPos += 8;
   } else {
-    m_Buffer = NULL;
+    m_Buffer = nullptr;
     m_CurPos = 0;
     m_Size = 0;
     delete[] m_Buffer;
@@ -71,21 +71,21 @@ bool CArReader::Load(const char* path) {
   return true;
 }
 
-bool CArReader::SeekNextBlock() {
+auto CArReader::SeekNextBlock() -> bool {
   if (m_CurPos >= m_Size) {
     return false;  // EOF
   }
 
-  ar_header_t* header = (ar_header_t*)(m_Buffer + m_CurPos);
+  auto* header = reinterpret_cast<ar_header_t*>(m_Buffer + m_CurPos);
 
   m_CurPos += sizeof(ar_header_t);
 
-  size_t blockSize = atoll(header->szSize);
+  size_t const blockSize = atoll(header->szSize);
 
   if (header->szIdentifier[0] == '/') {
     if (header->szIdentifier[1] == '/') {
       // extended identifier block
-      m_ExIdentifierBlock = (char*)&m_Buffer[m_CurPos];
+      m_ExIdentifierBlock = reinterpret_cast<char*>(&m_Buffer[m_CurPos]);
       m_CurPos += blockSize;
       SeekNextBlock();
       return true;
@@ -99,7 +99,7 @@ bool CArReader::SeekNextBlock() {
     }
 
     // block uses extended identifier
-    size_t exIdentifierOffset = atoll(&header->szIdentifier[1]);
+    size_t const exIdentifierOffset = atoll(&header->szIdentifier[1]);
     m_CurRealIdentifier = ArTrimIdentifier(&m_ExIdentifierBlock[exIdentifierOffset]);
   } else {
     m_CurRealIdentifier = ArTrimIdentifier(header->szIdentifier);
@@ -115,8 +115,8 @@ bool CArReader::SeekNextBlock() {
   return true;
 }
 
-const char* CArReader::GetBlockIdentifier() { return m_CurRealIdentifier; }
+auto CArReader::GetBlockIdentifier() -> const char* const  { return m_CurRealIdentifier; }
 
-uint8_t* CArReader::GetBlockData() { return m_CurBlock; }
+auto CArReader::GetBlockData() -> uint8_t* { return m_CurBlock; }
 
-size_t CArReader::GetBlockSize() { return m_CurBlockSize; }
+auto CArReader::GetBlockSize() -> size_t const { return m_CurBlockSize; }

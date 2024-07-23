@@ -26,9 +26,6 @@
 #include <dirent.h>
 #endif
 
-CN64Sym::n64sym_fmt_lut_t CN64Sym::FormatNames[] = {{"default", N64SYM_FMT_DEFAULT}, {"pj64", N64SYM_FMT_PJ64},         {"nemu", N64SYM_FMT_NEMU},
-                                                    {"armips", N64SYM_FMT_ARMIPS},   {"n64split", N64SYM_FMT_N64SPLIT}, {"splat", N64SYM_FMT_SPLAT}};
-
 CN64Sym::CN64Sym() : m_Output(&std::cout) { m_BuiltinSigs.LoadFromMemory(gBuiltinSignatureFile); }
 
 CN64Sym::~CN64Sym() { delete[] m_Binary; }

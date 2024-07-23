@@ -11,6 +11,7 @@
 #define N64SYM_H
 
 #include <algorithm>
+#include <array>
 #include <cstdarg>
 #include <cstdlib>
 #include <fstream>
@@ -46,7 +47,14 @@ class CN64Sym {
     n64sym_output_fmt_t fmt;
   };
 
-  static n64sym_fmt_lut_t FormatNames[];
+  static constexpr std::array<n64sym_fmt_lut_t, 6> FormatNames = {{
+    { .name = "default", .fmt = N64SYM_FMT_DEFAULT},
+    { .name = "pj64", .fmt = N64SYM_FMT_PJ64},
+    { .name = "nemu", .fmt = N64SYM_FMT_NEMU},
+    { .name = "armips", .fmt = N64SYM_FMT_ARMIPS},
+    { .name = "n64split", .fmt = N64SYM_FMT_N64SPLIT},
+    { .name = "splat", .fmt = N64SYM_FMT_SPLAT}
+  }};
 
   using obj_processing_context_t = struct {
     CN64Sym* mt_this;

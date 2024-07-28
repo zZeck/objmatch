@@ -21,7 +21,6 @@
 
 #include <boost/crc.hpp>
 
-#include "arutil.h"
 #include "elfutil.h"
 #include "n64sig.h"
 #include "pathutil.h"
@@ -286,7 +285,6 @@ void CN64Sig::ProcessLibrary(const char *path) {
   Elf *object_file_elf = nullptr;
   while ((object_file_elf = elf_begin(archive_file_descriptor, elf_command, archive_elf)) != nullptr) {
     auto archive_header = elf_getarhdr(object_file_elf);//null check?
-
 
     const std::filesystem::path object_path { archive_header->ar_name };
     if (object_path.extension() != ".o") {

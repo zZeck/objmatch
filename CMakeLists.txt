@@ -26,14 +26,12 @@ src/signaturefile.cpp
 src/threadpool.cpp
 src/pathutil.cpp
 src/elfutil.cpp
-src/arutil.cpp
 src/builtin_signatures_include.s)
 
 add_executable(n64sig
 src/n64sig_main.cpp
 src/n64sig.cpp
 src/elfutil.cpp
-src/arutil.cpp
 src/pathutil.cpp)
 
 target_link_libraries(n64sym PRIVATE PkgConfig::LIBELF)

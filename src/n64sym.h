@@ -18,7 +18,6 @@
 #include <set>
 #include <vector>
 
-#include "arutil.h"
 #include "elfutil.h"
 #include "pathutil.h"
 #include "signaturefile.h"

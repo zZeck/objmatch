@@ -30,6 +30,7 @@
 #else
 #include <dirent.h>
 #endif
+#include <filesystem>
 
 CN64Sym::CN64Sym() : m_Output(&std::cout) { m_BuiltinSigs.LoadFromMemory(gBuiltinSignatureFile); }
 
@@ -269,26 +270,43 @@ void CN64Sym::ProcessFile(const char* path) {
 }
 
 void CN64Sym::ProcessLibrary(const char* path) {
-  CArReader ar;
-
-  if (!ar.Load(path)) {
-    return;
+  if (elf_version(EV_CURRENT) == EV_NONE) {
+    printf("version out of date");
   }
 
-  while (ar.SeekNextBlock()) {
-    if (!PathIsObjectFile(ar.GetBlockIdentifier())) {
+  auto archive_file_descriptor = open(path, O_RDONLY);
+
+  auto archive_elf = elf_begin(archive_file_descriptor, ELF_C_READ, nullptr);
+  if (archive_elf == nullptr) return;
+
+  Elf_Cmd elf_command = ELF_C_READ;
+  Elf *object_file_elf = nullptr;
+  while ((object_file_elf = elf_begin(archive_file_descriptor, elf_command, archive_elf)) != nullptr) {
+    auto archive_header = elf_getarhdr(object_file_elf);//null check?
+    const std::filesystem::path object_path { archive_header->ar_name };
+
+    if (object_path.extension() != ".o") {
+      elf_command = elf_next(object_file_elf);
+      elf_end(object_file_elf);
       continue;
     }
+
+    auto objectName = object_path.string().c_str();
+
+    size_t elfsize = 0;
+    auto rawelf = reinterpret_cast<uint8_t *>(elf_rawfile(object_file_elf, &elfsize)); //error check
 
     // worker thread will delete objProcessingCtx after it's done
     auto* objProcessingCtx = new obj_processing_context_t;
     objProcessingCtx->mt_this = this;
     objProcessingCtx->libraryPath = path;
-    objProcessingCtx->blockIdentifier = ar.GetBlockIdentifier();
-    objProcessingCtx->blockData = ar.GetBlockData();
-    objProcessingCtx->blockSize = ar.GetBlockSize();
+    objProcessingCtx->blockIdentifier = objectName; //could be slightly different from ArTrimIdentifier?
+    objProcessingCtx->blockData = rawelf;
+    objProcessingCtx->blockSize = elfsize;
 
     m_ThreadPool.AddWorker(ProcessObjectProc, (void*)objProcessingCtx);
+    elf_command = elf_next(object_file_elf);
+    elf_end(object_file_elf);
   }
 
   m_ThreadPool.WaitForWorkers();
@@ -628,16 +646,34 @@ void CN64Sym::CountSymbolsInFile(const char* path) {
       m_NumSymbolsToCheck += sigFile.GetNumSymbols();
     }
   } else if (PathIsStaticLibrary(path)) {
-    CArReader ar;
-    if (ar.Load(path)) {
-      while (ar.SeekNextBlock()) {
-        if (!PathIsObjectFile(ar.GetBlockIdentifier())) {
+    if (elf_version(EV_CURRENT) == EV_NONE) {
+      printf("version out of date");
+    }
+
+    auto archive_file_descriptor = open(path, O_RDONLY);
+
+    if (auto archive_elf = elf_begin(archive_file_descriptor, ELF_C_READ, nullptr); archive_elf != nullptr) {
+      Elf_Cmd elf_command = ELF_C_READ;
+      Elf *object_file_elf = nullptr;
+      while ((object_file_elf = elf_begin(archive_file_descriptor, elf_command, archive_elf)) != nullptr) {
+        auto archive_header = elf_getarhdr(object_file_elf);//null check?
+        const std::filesystem::path object_path { archive_header->ar_name };
+
+        if (object_path.extension() != ".o") {
+          elf_command = elf_next(object_file_elf);
+          elf_end(object_file_elf);
           continue;
         }
 
+        size_t elfsize = 0;
+        auto rawelf = reinterpret_cast<uint8_t *>(elf_rawfile(object_file_elf, &elfsize)); //error check
+
         CElfContext elf;
-        elf.LoadFromMemory(ar.GetBlockData(), ar.GetBlockSize());
+        elf.LoadFromMemory(rawelf, elfsize);
         m_NumSymbolsToCheck += CountGlobalSymbolsInElf(elf);  // probably needs work
+
+        elf_command = elf_next(object_file_elf);
+        elf_end(object_file_elf);
       }
     }
   } else if (PathIsObjectFile(path)) {

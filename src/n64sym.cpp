@@ -15,8 +15,13 @@
 #include <map>
 #include <set>
 
+#include <boost/crc.hpp>
+#include <fcntl.h>
+#include <unistd.h>
+#include <libelf.h>
+#include <gelf.h>
+
 #include "builtin_signatures.h"
-#include "crc32.h"
 #include "pathutil.h"
 #include "signaturefile.h"
 
@@ -76,9 +81,9 @@ auto CN64Sym::LoadBinary(const char* binPath) -> bool {
 
     uint32_t entryPoint = bswap32(*reinterpret_cast<uint32_t*>(&m_Binary[0x08]));
 
-    uint32_t bootCheck = crc32_begin();
-    crc32_read(&m_Binary[0x40], 0xFC0, &bootCheck);
-    crc32_end(&bootCheck);
+    boost::crc_32_type result;
+    result.process_bytes(&m_Binary[0x40], 0xFC0);
+    uint32_t bootCheck = result.checksum();
 
     switch (bootCheck) {
       case 0x0B050EE0:  // 6103

@@ -6,3 +6,5 @@ oslibs
 build
 out
 *.yaml
+*.a
+*.o

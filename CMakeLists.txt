@@ -16,6 +16,9 @@ project(n64sym CXX ASM)
 
 include_directories(include src)
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LIBELF REQUIRED IMPORTED_TARGET libelf)
+
 add_executable(n64sym
 src/n64sym_main.cpp
 src/n64sym.cpp
@@ -35,7 +38,7 @@ src/arutil.cpp
 src/pathutil.cpp
 src/crc32.cpp)
 
-
+target_link_libraries(n64sym PRIVATE PkgConfig::LIBELF)
 
 #find_package(Catch2 3 REQUIRED)
 #

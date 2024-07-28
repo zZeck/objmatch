@@ -16,8 +16,9 @@
 #include <algorithm>
 #include <cstring>
 
+#include <boost/crc.hpp>
+
 #include "arutil.h"
-#include "crc32.h"
 #include "n64sig.h"
 #include "pathutil.h"
 
@@ -325,9 +326,15 @@ void CN64Sig::ProcessObject(CElfContext &elf, const char *objectName) {
 
     StripAndGetRelocsInSymbol(objectName, *symbolEntry.relocs, symbol, elf);
 
+    boost::crc_32_type result;
+
     symbolEntry.size = symbolSize;
-    symbolEntry.crc_a = crc32(&textData[symbolOffset], min(symbolSize, 8));
-    symbolEntry.crc_b = crc32(&textData[symbolOffset], symbolSize);
+
+    result.process_bytes(&textData[symbolOffset], min(symbolSize, 8));
+    symbolEntry.crc_a = result.checksum();
+    result.reset();
+    result.process_bytes(&textData[symbolOffset], symbolSize);
+    symbolEntry.crc_b = result.checksum();
 
     m_NumProcessedSymbols++;
 

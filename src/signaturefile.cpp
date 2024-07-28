@@ -16,7 +16,8 @@
 #include <string>
 #include <vector>
 
-#include "crc32.h"
+#include <boost/crc.hpp>
+
 #include "elfutil.h"
 
 #ifndef min
@@ -128,19 +129,22 @@ auto CSignatureFile::TestSymbol(size_t nSymbol, const uint8_t *buffer) -> bool {
 
   symbol_info_t &symbol = m_Symbols[nSymbol];
 
-  uint32_t crcA = crc32_begin();
-  uint32_t crcB = crc32_begin();
+  boost::crc_32_type resultA;
+  boost::crc_32_type resultB;
+
+  uint32_t crcA = 0;
+  uint32_t crcB = 0;
 
   if (symbol.relocs == nullptr) {
-    crc32_read(buffer, min(symbol.size, 8), &crcA);
-    crc32_end(&crcA);
+    resultA.process_bytes(buffer, min(symbol.size, 8));
+    auto crcA = resultA.checksum();
 
     if (symbol.crcA != crcA) {
       return false;
     }
 
-    crc32_read(buffer, symbol.size, &crcB);
-    crc32_end(&crcB);
+    resultB.process_bytes(buffer, symbol.size);
+    auto crcB = resultB.checksum();
 
     return (symbol.crcB == crcB);
   }
@@ -150,30 +154,32 @@ auto CSignatureFile::TestSymbol(size_t nSymbol, const uint8_t *buffer) -> bool {
   auto reloc = symbol.relocs->begin();
   uint32_t const crcA_limit = min(symbol.size, 8);
 
+  //resultA.reset();
   while (offset < crcA_limit && reloc != symbol.relocs->end()) {
     if (offset < reloc->offset) {
       // read up to relocated op or crcA_limit
-      crc32_read(&buffer[offset], min(reloc->offset, crcA_limit) - offset, &crcA);
-      crc32_read(&buffer[offset], min(reloc->offset, crcA_limit) - offset, &crcB);
+      resultA.process_bytes(&buffer[offset], min(reloc->offset, crcA_limit) - offset);
+      resultB.process_bytes(&buffer[offset], min(reloc->offset, crcA_limit) - offset);
+
       offset = min(reloc->offset, crcA_limit);
     } else if (offset == reloc->offset) {
       // strip and read relocated op
       uint8_t op[4];
       ReadStrippedWord(op, &buffer[offset], reloc->type);
-      crc32_read(op, 4, &crcA);
-      crc32_read(op, 4, &crcB);
+      resultA.process_bytes(op, 4);
+      resultB.process_bytes(op, 4);
       offset += 4;
       reloc++;
     }
   }
 
   if (offset < crcA_limit) {
-    crc32_read(&buffer[offset], crcA_limit - offset, &crcA);
-    crc32_read(&buffer[offset], crcA_limit - offset, &crcB);
+    resultA.process_bytes(&buffer[offset], crcA_limit - offset);
+    resultB.process_bytes(&buffer[offset], crcA_limit - offset);
     offset = crcA_limit;
   }
 
-  crc32_end(&crcA);
+  crcA = resultA.checksum();
 
   if (symbol.crcA != crcA) {
     return false;
@@ -182,24 +188,24 @@ auto CSignatureFile::TestSymbol(size_t nSymbol, const uint8_t *buffer) -> bool {
   while (offset < symbol.size && reloc != symbol.relocs->end()) {
     if (offset < reloc->offset) {
       // read up to relocated op
-      crc32_read(&buffer[offset], reloc->offset - offset, &crcB);
+      resultB.process_bytes(&buffer[offset], reloc->offset - offset);
       offset = reloc->offset;
     } else if (offset == reloc->offset) {
       // strip and read relocated op
       uint8_t op[4];
       ReadStrippedWord(op, &buffer[offset], reloc->type);
-      crc32_read(op, sizeof(op), &crcB);
+      resultB.process_bytes(op, sizeof(op));
       offset += 4;
       reloc++;
     }
   }
 
   if (offset < symbol.size) {
-    crc32_read(&buffer[offset], symbol.size - offset, &crcB);
+    resultB.process_bytes(&buffer[offset], symbol.size - offset);
     offset = symbol.size;
   }
 
-  crc32_end(&crcB);
+  crcB = resultB.checksum();
 
   return (symbol.crcB == crcB);
 }

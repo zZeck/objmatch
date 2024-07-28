@@ -23,7 +23,6 @@ add_executable(n64sym
 src/n64sym_main.cpp
 src/n64sym.cpp
 src/signaturefile.cpp
-src/crc32.cpp
 src/threadpool.cpp
 src/pathutil.cpp
 src/elfutil.cpp
@@ -35,10 +34,10 @@ src/n64sig_main.cpp
 src/n64sig.cpp
 src/elfutil.cpp
 src/arutil.cpp
-src/pathutil.cpp
-src/crc32.cpp)
+src/pathutil.cpp)
 
 target_link_libraries(n64sym PRIVATE PkgConfig::LIBELF)
+target_link_libraries(n64sig PRIVATE PkgConfig::LIBELF)
 
 #find_package(Catch2 3 REQUIRED)
 #

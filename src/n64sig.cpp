@@ -15,16 +15,23 @@
 
 #include <algorithm>
 #include <cstring>
+#include <fcntl.h>
+
+#include <filesystem>
 
 #include <boost/crc.hpp>
 
 #include "arutil.h"
+#include "elfutil.h"
 #include "n64sig.h"
 #include "pathutil.h"
+
+#include <libelf.h>
 
 #ifndef min
 #define min(a, b) (((a) < (b)) ? (a) : (b))
 #endif
+
 
 CN64Sig::CN64Sig() = default;
 
@@ -265,28 +272,41 @@ void CN64Sig::StripAndGetRelocsInSymbol(const char *objectName, reloc_map_t &rel
 }
 
 void CN64Sig::ProcessLibrary(const char *path) {
-  CArReader arReader;
-  CElfContext elf;
+  auto archive_file_descriptor = open(path, O_RDONLY);
 
-  if (!arReader.Load(path)) {
-    return;
+  //move to main or static?
+  if (elf_version(EV_CURRENT) == EV_NONE) {
+    printf("version out of date");
   }
 
-  while (arReader.SeekNextBlock()) {
-    const char *blockId = arReader.GetBlockIdentifier();
-    uint8_t *objectData = arReader.GetBlockData();
-    size_t const objectSize = arReader.GetBlockSize();
+  auto archive_elf = elf_begin(archive_file_descriptor, ELF_C_READ, nullptr); //null check
+  CElfContext elf;
 
-    if (!PathIsObjectFile(blockId)) {
+  Elf_Cmd elf_command = ELF_C_READ;
+  Elf *object_file_elf = nullptr;
+  while ((object_file_elf = elf_begin(archive_file_descriptor, elf_command, archive_elf)) != nullptr) {
+    auto archive_header = elf_getarhdr(object_file_elf);//null check?
+
+
+    const std::filesystem::path object_path { archive_header->ar_name };
+    if (object_path.extension() != ".o") {
+      elf_command = elf_next(object_file_elf);
+      elf_end(object_file_elf);
       continue;
     }
+    
+    //use u8string later?
+    auto objectName = object_path.stem().string().c_str();
 
-    char objectName[256];
-    PathGetFileName(blockId, objectName, sizeof(objectName));
+    size_t elfsize = 0;
+    auto rawelf = reinterpret_cast<uint8_t *>(elf_rawfile(object_file_elf, &elfsize)); //error check
 
-    elf.LoadFromMemory(objectData, objectSize);
+    elf.LoadFromMemory(rawelf, elfsize);
 
     ProcessObject(elf, objectName);
+
+    elf_command = elf_next(object_file_elf);
+    elf_end(object_file_elf);
   }
 }
 

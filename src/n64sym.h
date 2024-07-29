@@ -19,7 +19,6 @@
 #include <vector>
 
 #include "elfutil.h"
-#include "pathutil.h"
 #include "signaturefile.h"
 #include "threadpool.h"
 

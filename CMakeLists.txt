@@ -19,20 +19,22 @@ include_directories(include src)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBELF REQUIRED IMPORTED_TARGET libelf)
 
-add_executable(n64sym
+add_executable(
+n64sym
 src/n64sym_main.cpp
 src/n64sym.cpp
 src/signaturefile.cpp
 src/threadpool.cpp
-src/pathutil.cpp
 src/elfutil.cpp
-src/builtin_signatures_include.s)
+src/builtin_signatures_include.s
+)
 
-add_executable(n64sig
+add_executable(
+n64sig
 src/n64sig_main.cpp
 src/n64sig.cpp
 src/elfutil.cpp
-src/pathutil.cpp)
+)
 
 target_link_libraries(n64sym PRIVATE PkgConfig::LIBELF)
 target_link_libraries(n64sig PRIVATE PkgConfig::LIBELF)

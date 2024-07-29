@@ -17,12 +17,9 @@
 #include <vector>
 
 #include <boost/crc.hpp>
+#include <elf.h>
 
-#include "elfutil.h"
-
-#ifndef min
-#define min(a, b) (((a) < (b)) ? (a) : (b))
-#endif
+//#include "elfutil.h"
 
 CSignatureFile::CSignatureFile() = default;
 
@@ -136,7 +133,7 @@ auto CSignatureFile::TestSymbol(size_t nSymbol, const uint8_t *buffer) -> bool {
   uint32_t crcB = 0;
 
   if (symbol.relocs == nullptr) {
-    resultA.process_bytes(buffer, min(symbol.size, 8));
+    resultA.process_bytes(buffer, std::min(symbol.size, 8U));
     auto crcA = resultA.checksum();
 
     if (symbol.crcA != crcA) {
@@ -152,16 +149,16 @@ auto CSignatureFile::TestSymbol(size_t nSymbol, const uint8_t *buffer) -> bool {
   size_t offset = 0;
 
   auto reloc = symbol.relocs->begin();
-  uint32_t const crcA_limit = min(symbol.size, 8);
+  uint32_t const crcA_limit = std::min(symbol.size, 8U);
 
   //resultA.reset();
   while (offset < crcA_limit && reloc != symbol.relocs->end()) {
     if (offset < reloc->offset) {
       // read up to relocated op or crcA_limit
-      resultA.process_bytes(&buffer[offset], min(reloc->offset, crcA_limit) - offset);
-      resultB.process_bytes(&buffer[offset], min(reloc->offset, crcA_limit) - offset);
+      resultA.process_bytes(&buffer[offset], std::min(reloc->offset, crcA_limit) - offset);
+      resultB.process_bytes(&buffer[offset], std::min(reloc->offset, crcA_limit) - offset);
 
-      offset = min(reloc->offset, crcA_limit);
+      offset = std::min(reloc->offset, crcA_limit);
     } else if (offset == reloc->offset) {
       // strip and read relocated op
       uint8_t op[4];

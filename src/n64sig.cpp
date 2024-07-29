@@ -23,14 +23,8 @@
 
 #include "elfutil.h"
 #include "n64sig.h"
-#include "pathutil.h"
 
 #include <libelf.h>
-
-#ifndef min
-#define min(a, b) (((a) < (b)) ? (a) : (b))
-#endif
-
 
 CN64Sig::CN64Sig() = default;
 
@@ -42,7 +36,7 @@ auto stricmp(const char *a, const char *b) -> int {
   size_t const alen = strlen(a);
   size_t const blen = strlen(b);
 
-  size_t const len = min(alen, blen);
+  size_t const len = std::min(alen, blen);
 
   for (size_t i = 0; i < len; i++) {
     int const ac = tolower(a[i]);
@@ -294,7 +288,7 @@ void CN64Sig::ProcessLibrary(const char *path) {
     }
     
     //use u8string later?
-    auto objectName = object_path.stem().string().c_str();
+    auto objectName = strdup(object_path.stem().string().c_str());
 
     size_t elfsize = 0;
     auto rawelf = reinterpret_cast<uint8_t *>(elf_rawfile(object_file_elf, &elfsize)); //error check
@@ -302,6 +296,8 @@ void CN64Sig::ProcessLibrary(const char *path) {
     elf.LoadFromMemory(rawelf, elfsize);
 
     ProcessObject(elf, objectName);
+
+    free(objectName);
 
     elf_command = elf_next(object_file_elf);
     elf_end(object_file_elf);
@@ -348,7 +344,7 @@ void CN64Sig::ProcessObject(CElfContext &elf, const char *objectName) {
 
     symbolEntry.size = symbolSize;
 
-    result.process_bytes(&textData[symbolOffset], min(symbolSize, 8));
+    result.process_bytes(&textData[symbolOffset], std::min(symbolSize, 8U));
     symbolEntry.crc_a = result.checksum();
     result.reset();
     result.process_bytes(&textData[symbolOffset], symbolSize);
@@ -372,25 +368,28 @@ void CN64Sig::ProcessObject(CElfContext &elf, const char *objectName) {
 }
 
 void CN64Sig::ProcessObject(const char *path) {
-  char objectName[256];
-  PathGetFileName(path, objectName, sizeof(objectName));
+  const std::filesystem::path fs_path { path };
+  auto objectName = strdup(fs_path.stem().string().c_str());
 
   CElfContext elf;
   if (elf.Load(path)) {
     ProcessObject(elf, objectName);
   }
+  free(objectName);
 }
 
 void CN64Sig::ProcessFile(const char *path) {
-  if (PathIsStaticLibrary(path)) {
+  const std::filesystem::path fs_path { path };
+  if (fs_path.extension() == ".a") {
     ProcessLibrary(path);
-  } else if (PathIsObjectFile(path)) {
+  } else if (fs_path.extension() == ".o") {
     ProcessObject(path);
   }
 }
 
 void CN64Sig::ScanRecursive(const char *path) {
-  if (PathIsStaticLibrary(path) || PathIsObjectFile(path)) {
+  const std::filesystem::path fs_path { path };
+  if (fs_path.extension() == ".a" || fs_path.extension() == ".o") {
     ProcessFile(path);
     return;
   }
@@ -422,7 +421,8 @@ void CN64Sig::ScanRecursive(const char *path) {
         ScanRecursive(next_path);
         break;
       case DT_REG: {
-        if (PathIsStaticLibrary(next_path) || PathIsObjectFile(next_path)) {
+        const std::filesystem::path fs_path { next_path };
+        if (fs_path.extension() == ".a" || fs_path.extension() == ".o") {
           // printf("# file: %s\n\n", next_path);
           ProcessFile(next_path);
         }

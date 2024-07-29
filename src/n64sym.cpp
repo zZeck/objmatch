@@ -22,7 +22,6 @@
 #include <gelf.h>
 
 #include "builtin_signatures.h"
-#include "pathutil.h"
 #include "signaturefile.h"
 
 #ifdef WIN32
@@ -31,6 +30,11 @@
 #include <dirent.h>
 #endif
 #include <filesystem>
+
+auto IsFileWithSymbols(const char *path) -> bool {
+  const std::filesystem::path fs_path { path };
+  return fs_path.extension() == ".a" || fs_path.extension() == ".o" || fs_path.extension() == ".sig";
+}
 
 CN64Sym::CN64Sym() : m_Output(&std::cout) { m_BuiltinSigs.LoadFromMemory(gBuiltinSignatureFile); }
 
@@ -56,7 +60,8 @@ auto CN64Sym::LoadBinary(const char* binPath) -> bool {
   file.seekg(0, std::ifstream::beg);
   file.read(reinterpret_cast<char*>(m_Binary), m_BinarySize);
 
-  if (PathIsN64Rom(binPath) && !m_bOverrideHeaderSize) {
+  const std::filesystem::path fs_path { binPath };
+  if ((fs_path.extension() == ".z64" || fs_path.extension() == ".n64" || fs_path.extension() == ".v64") && !m_bOverrideHeaderSize) {
     if (m_BinarySize < 0x101000) {
       delete[] m_Binary;
       m_BinarySize = 0;
@@ -260,11 +265,12 @@ void CN64Sym::ScanRecursive(const char* path) {
 }
 
 void CN64Sym::ProcessFile(const char* path) {
-  if (PathIsStaticLibrary(path)) {
+  const std::filesystem::path fs_path { path };
+  if (fs_path.extension() == ".a") {
     ProcessLibrary(path);
-  } else if (PathIsObjectFile(path)) {
+  } else if (fs_path.extension() == ".o") {
     ProcessObject(path);
-  } else if (PathIsSignatureFile(path)) {
+  } else if (fs_path.extension() == ".sig") {
     ProcessSignatureFile(path);
   }
 }
@@ -640,12 +646,13 @@ void CN64Sym::TallyNumSymbolsToCheck() {
 }
 
 void CN64Sym::CountSymbolsInFile(const char* path) {
-  if (PathIsSignatureFile(path)) {
+  const std::filesystem::path fs_path { path };
+  if (fs_path.extension() == ".sig") {
     CSignatureFile sigFile;
     if (sigFile.Load(path)) {
       m_NumSymbolsToCheck += sigFile.GetNumSymbols();
     }
-  } else if (PathIsStaticLibrary(path)) {
+  } else if (fs_path.extension() == ".a") {
     if (elf_version(EV_CURRENT) == EV_NONE) {
       printf("version out of date");
     }
@@ -676,7 +683,7 @@ void CN64Sym::CountSymbolsInFile(const char* path) {
         elf_end(object_file_elf);
       }
     }
-  } else if (PathIsObjectFile(path)) {
+  } else if (fs_path.extension() == ".o") {
     CElfContext elf;
     if (elf.Load(path)) {
       m_NumSymbolsToCheck += CountGlobalSymbolsInElf(elf);

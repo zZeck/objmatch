@@ -19,8 +19,6 @@
 #include <boost/crc.hpp>
 #include <elf.h>
 
-//#include "elfutil.h"
-
 CSignatureFile::CSignatureFile() = default;
 
 CSignatureFile::~CSignatureFile() {

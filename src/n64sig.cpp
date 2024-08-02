@@ -252,6 +252,11 @@ void CN64Sig::StripAndGetRelocsInSymbol(const char *objectName, reloc_map_t &rel
     auto symbol_type = GELF_ST_TYPE(symbol.st_info);
     auto symbol_binding = GELF_ST_BIND(symbol.st_info);
 
+    auto section_referenced_by_symbol = elf_getscn(elf, symbol.st_shndx);
+    GElf_Shdr section_referenced_by_symbol_header;
+    gelf_getshdr(section_referenced_by_symbol, &section_referenced_by_symbol_header);
+
+
     auto relocation_type = GELF_R_TYPE(relocation.r_info);
 
     char relSymbolName[128];
@@ -299,11 +304,9 @@ void CN64Sig::StripAndGetRelocsInSymbol(const char *objectName, reloc_map_t &rel
         addend = (opcodeBE & 0x03FFFFFF) << 2;
       }
 
-      auto relSymbolSectionName = elf_strptr(elf, section_header_string_table_index, symbol_section_header.sh_name);
+      auto relSymbolSectionName = elf_strptr(elf, section_header_string_table_index, section_referenced_by_symbol_header.sh_name);
 
       snprintf(relSymbolName, sizeof(relSymbolName), "%s_%s_%04X", objectName, &relSymbolSectionName[1], addend);
-
-      printf("RelocsInSymbol2  1:%s\n", relSymbolName);
 
       // printf("# %08X\n", relSymbol->Value());
     }
@@ -327,7 +330,6 @@ void CN64Sig::StripAndGetRelocsInSymbol(const char *objectName, reloc_map_t &rel
     relocEntry.relocType = relocation_type;
     strncpy(relocEntry.relocSymbolName, relSymbolName, sizeof(relocEntry.relocSymbolName));
 
-    printf("RelocsInSymbol2  2:%s\n", relocEntry.relocSymbolName);
     relocs[relocEntry].push_back(relocation.r_offset - symbol.st_value);
   }
 }
@@ -497,46 +499,6 @@ void CN64Sig::ScanRecursive(const char *path) {
     ProcessFile(path);
     return;
   }
-
-  DIR *dir = nullptr;
-  dir = opendir(path);
-  if (dir == nullptr) {
-    printf("%s is neither a directory or file with symbols.\n", path);
-    return;
-  }
-
-  struct dirent *entry = nullptr;
-  while ((entry = readdir(dir)) != nullptr) {
-    char next_path[PATH_MAX];
-
-    if (entry->d_name == nullptr) {
-      continue;
-    }
-
-    snprintf(next_path, sizeof(next_path), "%s/%s", path, entry->d_name);
-
-    switch (entry->d_type) {
-      case DT_DIR:
-        // skip "." dirs
-        if (entry->d_name[0] == '.') {
-          continue;
-        }
-        // scan subdirectory
-        ScanRecursive(next_path);
-        break;
-      case DT_REG: {
-        const std::filesystem::path fs_path{next_path};
-        if (fs_path.extension() == ".a" || fs_path.extension() == ".o") {
-          // printf("# file: %s\n\n", next_path);
-          ProcessFile(next_path);
-        }
-        break;
-      }
-      default:
-        break;
-    }
-  }
-  closedir(dir);
 }
 
 void CN64Sig::SetVerbose(bool bVerbose) { m_bVerbose = bVerbose; }

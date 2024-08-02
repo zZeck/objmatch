@@ -14,6 +14,9 @@
 
 #include "elfutil.h"
 
+#include <libelf.h>
+#include <gelf.h>
+
 #ifndef N64SIG_H
 #define N64SIG_H
 
@@ -55,9 +58,9 @@ class CN64Sig {
 
   static auto GetRelTypeName(uint8_t relType) -> const char *const;
   static void FormatAnonymousSymbol(char *symbolName);
-  static void StripAndGetRelocsInSymbol(const char *objectName, reloc_map_t &relocs, CElfSymbol *symbol, CElfContext &elf);
+  static void StripAndGetRelocsInSymbol(const char *objectName, reloc_map_t &relocs, GElf_Sym *symbol, Elf *elf);
   void ProcessLibrary(const char *path);
-  void ProcessObject(CElfContext &elf, const char *objectName);
+  void ProcessObject(Elf *elf, const char *objectName);
   void ProcessObject(const char *path);
   void ProcessFile(const char *path);
   void ScanRecursive(const char *path);

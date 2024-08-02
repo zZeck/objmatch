@@ -109,10 +109,10 @@ using CElfHeader = struct CElfHeader {
 
 class CElfContext {
   // CElfHeader* m_ElfHeader;
-  uint8_t* m_Buffer{nullptr};
-  size_t m_Size{0};
 
  public:
+  uint8_t* m_Buffer{nullptr};
+  size_t m_Size{0};
   auto Header() -> CElfHeader* { return reinterpret_cast<CElfHeader*>(m_Buffer); }
 
   CElfContext();

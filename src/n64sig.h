@@ -11,8 +11,7 @@
 #include <map>
 #include <string>
 #include <vector>
-
-#include "elfutil.h"
+#include <string.h>
 
 #include <libelf.h>
 #include <gelf.h>

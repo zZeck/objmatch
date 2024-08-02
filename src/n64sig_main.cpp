@@ -11,6 +11,7 @@
 #include <cstdlib>
 
 #include "n64sig.h"
+#include <string.h>
 
 auto main(int argc, const char *argv[]) -> int {
   if (argc < 2) {

@@ -11,6 +11,7 @@
 #include <cstdlib>
 
 #include "n64sym.h"
+#include <string.h>
 
 auto main(int argc, const char* argv[]) -> int {
   CN64Sym n64sym;

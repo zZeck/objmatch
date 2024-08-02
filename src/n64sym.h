@@ -18,9 +18,7 @@
 #include <set>
 #include <vector>
 
-#include "elfutil.h"
 #include "signaturefile.h"
-#include "threadpool.h"
 
 using n64sym_output_fmt_t = enum { N64SYM_FMT_DEFAULT, N64SYM_FMT_PJ64, N64SYM_FMT_NEMU, N64SYM_FMT_ARMIPS, N64SYM_FMT_N64SPLIT, N64SYM_FMT_SPLAT };
 
@@ -37,8 +35,7 @@ class CN64Sym {
   void SetHeaderSize(uint32_t headerSize);
   auto SetOutputPath(const char* path) -> bool;
   auto Run() -> bool;
-  void DumpResults();
-
+  
  private:
   using n64sym_fmt_lut_t = struct {
     const char* name;
@@ -73,8 +70,6 @@ class CN64Sym {
     int nBytesMatched;
   };
 
-  CThreadPool m_ThreadPool;
-
   uint8_t* m_Binary{nullptr};
   size_t m_BinarySize{0};
   uint32_t m_HeaderSize{0x80000000};
@@ -92,39 +87,29 @@ class CN64Sym {
   size_t m_NumSymbolsToCheck{0};
   size_t m_NumSymbolsChecked{0};
 
-  pthread_mutex_t m_ProgressMutex{};
-
   std::vector<search_result_t> m_Results;
   std::vector<const char*> m_LibPaths;
   std::set<uint32_t> m_LikelyFunctionOffsets;
 
   CSignatureFile m_BuiltinSigs;
 
+  void DumpResults();
   void ScanRecursive(const char* path);
 
   void ProcessFile(const char* path);
-  void ProcessLibrary(const char* path);
-  void ProcessObject(const char* path);
-  void ProcessObject(obj_processing_context_t* objProcessingCtx);
-  static auto ProcessObjectProc(void* _objProcessingCtx) -> void*;
   void ProcessSignatureFile(const char* path);
   void ProcessSignatureFile(CSignatureFile& sigFile);
 
-  static auto TestElfObjectText(CElfContext* elf, const char* data, int* nBytesMatched) -> bool;
   auto TestSignatureSymbol(CSignatureFile& sigFile, size_t nSymbol, uint32_t offset) -> bool;
 
   void TallyNumSymbolsToCheck();
   void CountSymbolsRecursive(const char* path);
   void CountSymbolsInFile(const char* path);
-  static auto CountGlobalSymbolsInElf(CElfContext& elf) -> size_t;
 
   auto AddResult(search_result_t result) -> bool;
-  void AddSymbolResults(CElfContext* elf, uint32_t baseAddress, uint32_t maxTextOffset = 0);
-  void AddRelocationResults(CElfContext* elf, const char* block, const char* altNamePrefix, int maxTextOffset = 0);
   static auto ResultCmp(search_result_t a, search_result_t b) -> bool;
   void SortResults();
 
-  void ProgressInc(size_t numSymbols);
   void Log(const char* format, ...) const;
   void Output(const char* format, ...);
   static void ClearLine(int nChars);

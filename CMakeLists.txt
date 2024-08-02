@@ -24,8 +24,6 @@ n64sym
 src/n64sym_main.cpp
 src/n64sym.cpp
 src/signaturefile.cpp
-src/threadpool.cpp
-src/elfutil.cpp
 src/builtin_signatures_include.s
 )
 
@@ -33,7 +31,6 @@ add_executable(
 n64sig
 src/n64sig_main.cpp
 src/n64sig.cpp
-src/elfutil.cpp
 )
 
 target_link_libraries(n64sym PRIVATE PkgConfig::LIBELF)

@@ -12,40 +12,21 @@
 #include <cstdint>
 #include <vector>
 
+#include <signature.h>
+
 class CSignatureFile {
  private:
-  using reloc_t = struct {
-    const char *name;
-    uint8_t type;
-    uint32_t offset;
-  };
-
-  using symbol_info_t = struct {
-    const char *name;
-    uint32_t size;
-    uint32_t crcA;
-    uint32_t crcB;
-    std::vector<reloc_t> *relocs;
-  };
-
   char *m_Buffer{nullptr};
   size_t m_Size{0};
   size_t m_Pos{0};
 
-  std::vector<symbol_info_t> m_Symbols;
+  std::vector<symbol_entry_t> m_Symbols;
 
-  static auto ParseNumber(const char *str, uint32_t *result) -> bool;
   static auto GetRelocationDirectiveValue(const char *str) -> int;
-  static auto RelocOffsetCompare(const reloc_t &a, const reloc_t &b) -> bool;
+  static auto RelocOffsetCompare(const reloc_entry_t &a, const reloc_entry_t &b) -> bool;
   static void ReadStrippedWord(uint8_t *dst, const uint8_t *src, int relType);
 
-  void SkipWhitespace();
-  auto GetNextToken() -> char *;
-  auto AtEndOfLine() -> bool;
   void Parse();
-  [[nodiscard]] auto IsEOF() const -> bool const;
-
-  void SortRelocationsByOffset();
 
  public:
   CSignatureFile();

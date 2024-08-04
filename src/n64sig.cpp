@@ -14,17 +14,18 @@
 #endif
 
 #include <fcntl.h>
-
+#include <gelf.h>
+#include <libelf.h>
+#include <yaml-cpp/yaml.h>
 
 #include <algorithm>
 #include <boost/crc.hpp>
 #include <cstring>
 #include <filesystem>
+#include <vector>
 
 #include "n64sig.h"
-
-#include <gelf.h>
-#include <libelf.h>
+#include "signature.h"
 
 CN64Sig::CN64Sig() = default;
 
@@ -62,8 +63,6 @@ auto strPastUnderscores(const char *s) -> const char *const {
 auto CN64Sig::Run() -> bool {
   m_NumProcessedSymbols = 0;
 
-  printf("# sig_v1\n\n");
-
   for (auto libPath : m_LibPaths) {
     ScanRecursive(libPath);
   }
@@ -85,74 +84,13 @@ auto CN64Sig::Run() -> bool {
   std::sort(symbols.begin(), symbols.end(),
             [](symbol_entry_t &a, symbol_entry_t &b) { return stricmp(strPastUnderscores(a.name), strPastUnderscores(b.name)) < 0; });
 
-  if (m_OutputFormat == N64SIG_FMT_DEFAULT) {
-    for (auto &symbolEntry : symbols) {
-      printf("%s 0x%04X 0x%08X 0x%08X\n", symbolEntry.name, symbolEntry.size, symbolEntry.crc_a, symbolEntry.crc_b);
+  // delete symbolEntry.relocs;
 
-      if (symbolEntry.relocs == nullptr) {
-        continue;
-      }
-
-      for (auto &j : *symbolEntry.relocs) {
-        const reloc_entry_t &relocEntry = j.first;
-        const std::vector<uint16_t> &offsets = j.second;
-
-        printf(" .%-6s %s", GetRelTypeName(relocEntry.relocType), relocEntry.relocSymbolName);
-
-        for (auto &offset : offsets) {
-          printf(" 0x%03X", offset);
-        }
-
-        printf("\n");
-      }
-
-      delete symbolEntry.relocs;
-
-      printf("\n");
-    }
-  } else if (m_OutputFormat == N64SIG_FMT_JSON) {
-    /*
-    ["alCSPNew", 0x016C, 0x3DEB8DFE 0x8E97D34A, [
-        ["targ26", "__initChanState", [0x0A4]],
-        ["targ26", "alEvtqNew", [0x12C]]
-    ]]
-    */
-    printf("[\n");
-
-    bool bFirstSymbol = true;
-    for (auto &symbolEntry : symbols) {
-      printf("%s  [\"%s\", %u, %u, %u, [", (bFirstSymbol ? "" : ",\n"), symbolEntry.name, symbolEntry.size, symbolEntry.crc_a, symbolEntry.crc_b);
-
-      if (symbolEntry.relocs == nullptr) {
-        printf("]]");
-        continue;
-      }
-
-      printf("\n");
-
-      bool bFirstReloc = true;
-      for (auto &i : *symbolEntry.relocs) {
-        const reloc_entry_t &relocEntry = i.first;
-        const std::vector<uint16_t> &offsets = i.second;
-
-        printf(R"(%s    ["%s", "%s", [)", (bFirstReloc ? "" : ",\n"), GetRelTypeName(relocEntry.relocType), relocEntry.relocSymbolName);
-
-        bool bFirstOffset = true;
-        for (auto &offset : offsets) {
-          printf("%s%d", (bFirstOffset ? "" : ", "), offset);
-          bFirstOffset = false;
-        }
-
-        printf("]]");
-        bFirstReloc = false;
-      }
-
-      printf("\n  ]]");
-      bFirstSymbol = false;
-    }
-
-    printf("]");
-  }
+  YAML::Node node;
+  node = symbols;
+  YAML::Emitter emitter;
+  emitter << node;
+  printf("%s\n", emitter.c_str());
 
   return true;
 }
@@ -179,7 +117,7 @@ void CN64Sig::FormatAnonymousSymbol(char *symbolName) {
   }
 }
 
-void CN64Sig::StripAndGetRelocsInSymbol(const char *objectName, reloc_map_t &relocs, GElf_Sym *symbol, Elf *elf) {
+void CN64Sig::StripAndGetRelocsInSymbol(const char *objectName, std::vector<reloc_entry_t> &relocs, GElf_Sym *symbol, Elf *elf) {
   size_t section_header_string_table_index = 0;
   elf_getshdrstrndx(elf, &section_header_string_table_index);  // must return 0 for success
 
@@ -238,30 +176,29 @@ void CN64Sig::StripAndGetRelocsInSymbol(const char *objectName, reloc_map_t &rel
     }
 
     Elf32_Word extended_section_index;
-    GElf_Sym symbol;  // should I be using symmem directly? why use the returned pointer?
-    auto symbol_index = GELF_R_SYM(relocation.r_info);
-    auto symbol_ptr = gelf_getsymshndx(symbol_data, xndxdata, symbol_index, &symbol,
+    GElf_Sym rel_symbol;  // should I be using symmem directly? why use the returned pointer?
+    auto rel_symbol_index = GELF_R_SYM(relocation.r_info);
+    auto rel_symbol_ptr = gelf_getsymshndx(symbol_data, xndxdata, rel_symbol_index, &rel_symbol,
                                        &extended_section_index);  // guess this works fine with extended section index table null?
 
     // some relocations have no symbol
     // although should I check for that by their type, rather than a failure here?
     // could be skipping over something that failed for another reason
-    if (symbol_ptr == nullptr) continue;
+    if (rel_symbol_ptr == nullptr) continue;
 
-    auto symbol_name = elf_strptr(elf, symbol_section_header.sh_link, symbol.st_name);
-    auto symbol_type = GELF_ST_TYPE(symbol.st_info);
-    auto symbol_binding = GELF_ST_BIND(symbol.st_info);
+    auto rel_symbol_name = elf_strptr(elf, symbol_section_header.sh_link, rel_symbol.st_name);
+    auto rel_symbol_type = GELF_ST_TYPE(rel_symbol.st_info);
+    auto rel_symbol_binding = GELF_ST_BIND(rel_symbol.st_info);
 
-    auto section_referenced_by_symbol = elf_getscn(elf, symbol.st_shndx);
+    auto section_referenced_by_symbol = elf_getscn(elf, rel_symbol.st_shndx);
     GElf_Shdr section_referenced_by_symbol_header;
     gelf_getshdr(section_referenced_by_symbol, &section_referenced_by_symbol_header);
-
 
     auto relocation_type = GELF_R_TYPE(relocation.r_info);
 
     char relSymbolName[128];
 
-    strncpy(relSymbolName, symbol_name, sizeof(relSymbolName) - 1);
+    strncpy(relSymbolName, rel_symbol_name, sizeof(relSymbolName) - 1);
 
     auto text_data = elf_getdata(text_section, nullptr);
     if (text_data->d_type != ELF_T_BYTE) {
@@ -271,7 +208,7 @@ void CN64Sig::StripAndGetRelocsInSymbol(const char *objectName, reloc_map_t &rel
 
     reloc_entry_t relocEntry;
 
-    if (symbol_binding == STB_LOCAL) {
+    if (rel_symbol_binding == STB_LOCAL) {
       uint32_t addend = 0;
 
       // possibly could use libelf for this conversion using ELF_T_WORD or something?
@@ -327,11 +264,15 @@ void CN64Sig::StripAndGetRelocsInSymbol(const char *objectName, reloc_map_t &rel
       // exit(0);
     }
 
-    relocEntry.relocType = relocation_type;
-    strncpy(relocEntry.relocSymbolName, relSymbolName, sizeof(relocEntry.relocSymbolName));
+    relocEntry.type = relocation_type;
+    strncpy(relocEntry.name, relSymbolName, sizeof(relocEntry.name));
 
-    relocs[relocEntry].push_back(relocation.r_offset - symbol.st_value);
+    relocEntry.offset = relocation.r_offset - symbol->st_value;
+
+    relocs.push_back(relocEntry);
   }
+
+  std::sort(relocs.begin(), relocs.end(), [](reloc_entry_t &a, reloc_entry_t &b) { return a.offset < b.offset; });
 }
 
 void CN64Sig::ProcessLibrary(const char *path) {
@@ -406,7 +347,7 @@ void CN64Sig::ProcessObject(Elf *elf, const char *objectName) {
 
   auto text_data = elf_getdata(text_section, nullptr);
 
-  auto text_index = elf_ndxscn (text_section);
+  auto text_index = elf_ndxscn(text_section);
 
   auto symbol_data = elf_getdata(symtab_section, nullptr);
 
@@ -433,14 +374,15 @@ void CN64Sig::ProcessObject(Elf *elf, const char *objectName) {
 
     symbol_entry_t symbolEntry;
     strncpy(symbolEntry.name, symbol_name, sizeof(symbolEntry.name) - 1);
-    symbolEntry.relocs = new reloc_map_t;
-    StripAndGetRelocsInSymbol(objectName, *symbolEntry.relocs, &libelf_symbol, elf);
+
+    StripAndGetRelocsInSymbol(objectName, symbolEntry.relocs, &libelf_symbol, elf);
 
     boost::crc_32_type result;
 
     symbolEntry.size = symbol_size;
 
-    result.process_bytes(&reinterpret_cast<uint8_t *>(text_data->d_buf)[symbol_offset], std::min(reinterpret_cast<uint64_t>(symbol_size), reinterpret_cast<uint64_t>(UINT64_C(8))));
+    result.process_bytes(&reinterpret_cast<uint8_t *>(text_data->d_buf)[symbol_offset],
+                         std::min(reinterpret_cast<uint64_t>(symbol_size), reinterpret_cast<uint64_t>(UINT64_C(8))));
     symbolEntry.crc_a = result.checksum();
     result.reset();
     result.process_bytes(&reinterpret_cast<uint8_t *>(text_data->d_buf)[symbol_offset], symbol_size);
@@ -455,7 +397,7 @@ void CN64Sig::ProcessObject(Elf *elf, const char *objectName) {
         }
       }
 
-      delete symbolEntry.relocs;
+      //delete symbolEntry.relocs;
       continue;
     }
 

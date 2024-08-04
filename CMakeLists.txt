@@ -18,6 +18,7 @@ include_directories(include src)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBELF REQUIRED IMPORTED_TARGET libelf)
+pkg_check_modules(YAMLCPP REQUIRED IMPORTED_TARGET yaml-cpp)
 
 add_executable(
 n64sym
@@ -33,8 +34,8 @@ src/n64sig_main.cpp
 src/n64sig.cpp
 )
 
-target_link_libraries(n64sym PRIVATE PkgConfig::LIBELF)
-target_link_libraries(n64sig PRIVATE PkgConfig::LIBELF)
+target_link_libraries(n64sym PRIVATE PkgConfig::LIBELF PkgConfig::YAMLCPP)
+target_link_libraries(n64sig PRIVATE PkgConfig::LIBELF PkgConfig::YAMLCPP)
 
 #find_package(Catch2 3 REQUIRED)
 #

@@ -20,6 +20,7 @@ Checks:
   - '-llvm-header-guard'
   - '-fuchsia-default-arguments-calls'
   - '-fuchsia-default-arguments-declarations'
+  - '-llvm-namespace-comment'
   - '-abseil-*'
   - '-altera-*'
   - '-boost-*'

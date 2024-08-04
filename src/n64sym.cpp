@@ -58,7 +58,7 @@ auto IsFileWithSymbols(const char *path) -> bool {
   return fs_path.extension() == ".a" || fs_path.extension() == ".o" || fs_path.extension() == ".sig";
 }
 
-CN64Sym::CN64Sym() : m_Output(&std::cout) { m_BuiltinSigs.LoadFromMemory(gBuiltinSignatureFile); }
+CN64Sym::CN64Sym() : m_Output(&std::cout) { /*m_BuiltinSigs.LoadFromMemory(gBuiltinSignatureFile);*/ }
 
 CN64Sym::~CN64Sym() { delete[] m_Binary; }
 
@@ -331,7 +331,10 @@ auto CN64Sym::TestSignatureSymbol(CSignatureFile& sigFile, size_t nSymbol, uint3
       uint8_t const relocType = sigFile.GetRelocType(nSymbol, nReloc);
       uint32_t const relocOffset = sigFile.GetRelocOffset(nSymbol, nReloc);
 
-      uint32_t const opcode = bswap32(*reinterpret_cast<uint32_t*>(&m_Binary[offset + relocOffset]));
+      auto temp = &m_Binary[offset + relocOffset];
+      auto temp1 = *reinterpret_cast<uint32_t*>(temp);
+
+      uint32_t const opcode = bswap32(temp1);
 
       switch (relocType) {
         case R_MIPS_HI16:

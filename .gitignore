@@ -8,3 +8,7 @@ out
 *.yaml
 *.a
 *.o
+
+log
+log*.sig
+log*.yaml

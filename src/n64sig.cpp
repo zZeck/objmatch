@@ -241,6 +241,7 @@ void CN64Sig::StripAndGetRelocsInSymbol(const char *objectName, std::vector<relo
         addend = (opcodeBE & 0x03FFFFFF) << 2;
       }
 
+      //this is strange, the symbol is a section symbol, and its name was already the section name.
       auto relSymbolSectionName = elf_strptr(elf, section_header_string_table_index, section_referenced_by_symbol_header.sh_name);
 
       snprintf(relSymbolName, sizeof(relSymbolName), "%s_%s_%04X", objectName, &relSymbolSectionName[1], addend);
@@ -273,6 +274,266 @@ void CN64Sig::StripAndGetRelocsInSymbol(const char *objectName, std::vector<relo
   }
 
   std::sort(relocs.begin(), relocs.end(), [](reloc_entry_t &a, reloc_entry_t &b) { return a.offset < b.offset; });
+}
+
+void CN64Sig::ProcessLibrary2(const char *path) {
+  auto archive_file_descriptor = open(path, O_RDONLY);
+
+  // move to main or static?
+  if (elf_version(EV_CURRENT) == EV_NONE) {
+    printf("version out of date");
+  }
+
+  auto archive_elf = elf_begin(archive_file_descriptor, ELF_C_READ, nullptr);  // null check
+
+  Elf_Cmd elf_command = ELF_C_READ;
+  Elf *object_file_elf = nullptr;
+  while ((object_file_elf = elf_begin(archive_file_descriptor, elf_command, archive_elf)) != nullptr) {
+    auto archive_header = elf_getarhdr(object_file_elf);  // null check?
+
+    const std::filesystem::path object_path{archive_header->ar_name};
+    if (object_path.extension() != ".o") {
+      elf_command = elf_next(object_file_elf);
+      elf_end(object_file_elf);
+      continue;
+    }
+
+    // use u8string later?
+    auto objectName = strdup(object_path.stem().string().c_str());
+
+    ///PROCESS OBJECT START
+
+    size_t section_header_string_table_index = 0;
+    elf_getshdrstrndx(object_file_elf, &section_header_string_table_index);  // must return 0 for success
+  
+    Elf_Scn *section = nullptr;
+    Elf_Scn *text_section = nullptr;
+    GElf_Shdr text_header;
+  
+    Elf_Scn *symtab_section = nullptr;
+    GElf_Shdr symtab_header;
+
+    Elf_Scn *rel_text_section = nullptr;
+    GElf_Shdr rel_text_header;
+    while ((section = elf_nextscn(object_file_elf, section)) != nullptr) {
+      // gelf functions need allocated space to copy to
+      GElf_Shdr section_header;
+      gelf_getshdr(section, &section_header);  // error if not returns &section_header?
+  
+      auto section_name = elf_strptr(object_file_elf, section_header_string_table_index, section_header.sh_name);
+  
+      if (strcmp(section_name, ".text") == 0) {
+        text_section = section;
+        text_header = section_header;
+      }
+  
+      if (strcmp(section_name, ".symtab") == 0) {
+        symtab_section = section;
+        symtab_header = section_header;
+      }
+
+      if (strcmp(section_name, ".rel.text") == 0) {
+          rel_text_section = section;
+          rel_text_header = section_header;
+      }
+
+      if (rel_text_section != nullptr && text_section != nullptr && symtab_section != nullptr) break;
+    }
+  
+    if (text_section == nullptr || rel_text_section == nullptr || symtab_section == nullptr) {
+      elf_command = elf_next(object_file_elf);
+      elf_end(object_file_elf);
+      continue;
+    }
+  
+    auto text_data = elf_getdata(text_section, nullptr);
+  
+    auto text_index = elf_ndxscn(text_section);
+  
+    auto symbol_data = elf_getdata(symtab_section, nullptr);
+  
+    auto symbol_count = symtab_header.sh_size / symtab_header.sh_entsize;
+  
+    // optional extended section index table
+    // > 0 or != 0 ??? 0 IS a legit index, but not for this section, and indicates failure.
+    auto extended_section_index_table_index = elf_scnshndx(symtab_section);  
+    auto xndxdata = extended_section_index_table_index == 0 ? nullptr : elf_getdata(elf_getscn(object_file_elf, extended_section_index_table_index), nullptr);
+  
+    for (int nSymbol = 0; nSymbol < symbol_count; nSymbol++) {
+      GElf_Sym libelf_symbol;
+      auto symbol_ptr = gelf_getsym(symbol_data, nSymbol, &libelf_symbol);
+  
+      auto symbol_referencing_section_index = libelf_symbol.st_shndx;
+      auto symbol_name = elf_strptr(object_file_elf, symtab_header.sh_link, libelf_symbol.st_name);
+      auto symbol_type = GELF_ST_TYPE(libelf_symbol.st_info);
+      auto symbol_size = libelf_symbol.st_size;
+      auto symbol_offset = libelf_symbol.st_value;
+  
+      if (symbol_referencing_section_index != text_index || symbol_type != STT_FUNC || symbol_size == 0) {
+        continue;
+      }
+  
+      symbol_entry_t symbolEntry;
+      strncpy(symbolEntry.name, symbol_name, sizeof(symbolEntry.name) - 1);
+    
+      ////STRIP AND RELOCS START    
+      auto relocation_data = elf_getdata(rel_text_section, nullptr);
+    
+      auto relocation_modify_section = elf_getscn(object_file_elf, rel_text_header.sh_link);
+      GElf_Shdr relocation_modify_section_header;
+      gelf_getshdr(relocation_modify_section, &relocation_modify_section_header);
+      auto relocation_modify_section_data = elf_getdata(relocation_modify_section, nullptr);
+
+      auto entry_count = rel_text_header.sh_size / rel_text_header.sh_entsize;
+      uint32_t lastHi16Addend = 0;
+    
+      for (int relocation_index = 0; relocation_index < entry_count; relocation_index++) {
+        GElf_Rel relocation;
+        gelf_getrel(relocation_data, relocation_index, &relocation);  // why does this return relocation and take in argument by ptr?
+    
+        if (relocation.r_offset < libelf_symbol.st_value || relocation.r_offset >= libelf_symbol.st_value + libelf_symbol.st_size) {
+          continue;
+        }
+    
+        Elf32_Word extended_section_index;
+        GElf_Sym rel_symbol;  // should I be using symmem directly? why use the returned pointer?
+        auto rel_symbol_index = GELF_R_SYM(relocation.r_info);
+        auto rel_symbol_ptr = gelf_getsymshndx(symbol_data, xndxdata, rel_symbol_index, &rel_symbol,
+                                           &extended_section_index);  // guess this works fine with extended section index table null?
+    
+        // some relocations have no symbol
+        // although should I check for that by their type, rather than a failure here?
+        // could be skipping over something that failed for another reason
+        if (rel_symbol_ptr == nullptr) continue;
+    
+        auto rel_symbol_name = elf_strptr(object_file_elf, relocation_modify_section_header.sh_link, rel_symbol.st_name);
+        auto rel_symbol_type = GELF_ST_TYPE(rel_symbol.st_info);
+        auto rel_symbol_binding = GELF_ST_BIND(rel_symbol.st_info);
+    
+        auto section_referenced_by_symbol = elf_getscn(object_file_elf, rel_symbol.st_shndx);
+        GElf_Shdr section_referenced_by_symbol_header;
+        gelf_getshdr(section_referenced_by_symbol, &section_referenced_by_symbol_header);
+    
+        auto relocation_type = GELF_R_TYPE(relocation.r_info);
+    
+        char relSymbolName[128];
+    
+        strncpy(relSymbolName, rel_symbol_name, sizeof(relSymbolName) - 1);
+    
+        auto text_data = elf_getdata(text_section, nullptr);
+        if (text_data->d_type != ELF_T_BYTE) {
+        }  // this is an error
+    
+        auto opcode = reinterpret_cast<uint8_t *>(text_data->d_buf) + relocation.r_offset;
+    
+        reloc_entry_t relocEntry;
+    
+        if (rel_symbol_binding == STB_LOCAL) {
+          uint32_t addend = 0;
+    
+          // possibly could use libelf for this conversion using ELF_T_WORD or something?
+          // the transformation to do here, depends the platform of the elf file
+          // But not the platform I'm running on, right? because IN REGISTER, things will be in the expected order
+          // probably should add comment explaining why alternatives are bad, alignment issues, host platform issues
+          auto opcodeBE = opcode[0] << 8 * 3 | opcode[1] << 8 * 2 | opcode[2] << 8 * 1 | opcode[3] << 8 * 0;
+    
+          if (relocation_type == R_MIPS_HI16) {
+            addend = (opcodeBE & 0xFFFF) << 16;
+            GElf_Rel relocation2;
+            gelf_getrel(relocation_data, relocation_index + 1, &relocation2);  // todo guard
+    
+            // next relocation must be LO16
+            auto relocation2_type = GELF_R_TYPE(relocation2.r_info);
+            if (relocation2_type != R_MIPS_LO16) {
+              exit(EXIT_FAILURE);
+            }
+    
+            auto opcode2 = reinterpret_cast<const uint8_t *>(text_data->d_buf) + relocation2.r_offset;
+            auto opcode2BE = opcode2[0] << 8 * 3 | opcode2[1] << 8 * 2 | opcode2[2] << 8 * 1 | opcode2[3] << 8 * 0;
+    
+            addend += static_cast<int16_t>(opcode2BE & 0xFFFF);
+            lastHi16Addend = addend;
+    
+            // printf("%08X\n", addend);
+          } else if (relocation_type == R_MIPS_LO16) {
+            addend = lastHi16Addend;
+          } else if (relocation_type == R_MIPS_26) {
+            addend = (opcodeBE & 0x03FFFFFF) << 2;
+          }
+    
+          snprintf(relSymbolName, sizeof(relSymbolName), "%s_%s_%04X", objectName, &rel_symbol_name[1], addend);
+    
+          // printf("# %08X\n", relSymbol->Value());
+        }
+    
+        // set addend to 0 before crc
+        if (relocation_type == R_MIPS_HI16 || relocation_type == R_MIPS_LO16) {
+          opcode[2] = 0x00;
+          opcode[3] = 0x00;
+        } else if (relocation_type == R_MIPS_26) {
+          opcode[0] &= 0xFC;
+          opcode[1] = 0x00;
+          opcode[2] = 0x00;
+          opcode[3] = 0x00;
+        } else {
+          printf("# warning unhandled relocation type\n");
+          continue;
+          // printf("unk rel %d\n", relType);
+          // exit(0);
+        }
+    
+        relocEntry.type = relocation_type;
+        strncpy(relocEntry.name, relSymbolName, sizeof(relocEntry.name));
+    
+        relocEntry.offset = relocation.r_offset - libelf_symbol.st_value;
+    
+        symbolEntry.relocs.push_back(relocEntry);
+      }
+    
+      std::sort(symbolEntry.relocs.begin(), symbolEntry.relocs.end(), [](reloc_entry_t &a, reloc_entry_t &b) { return a.offset < b.offset; });
+
+
+      //// STRIP AND RELCOS END
+
+
+
+      boost::crc_32_type result;
+  
+      symbolEntry.size = symbol_size;
+  
+      result.process_bytes(&reinterpret_cast<uint8_t *>(text_data->d_buf)[symbol_offset],
+                           std::min(reinterpret_cast<uint64_t>(symbol_size), reinterpret_cast<uint64_t>(UINT64_C(8))));
+      symbolEntry.crc_a = result.checksum();
+      result.reset();
+      result.process_bytes(&reinterpret_cast<uint8_t *>(text_data->d_buf)[symbol_offset], symbol_size);
+      symbolEntry.crc_b = result.checksum();
+  
+      m_NumProcessedSymbols++;
+  
+      if (m_SymbolMap.contains(symbolEntry.crc_b)) {
+        if (m_bVerbose) {
+          if (strcmp(symbolEntry.name, m_SymbolMap[symbolEntry.crc_b].name) != 0) {
+            printf("# warning: skipped %s (have %s, crc: %08X)\n", symbolEntry.name, m_SymbolMap[symbolEntry.crc_b].name, symbolEntry.crc_b);
+          }
+        }
+  
+        //delete symbolEntry.relocs;
+        continue;
+      }
+  
+      m_SymbolMap[symbolEntry.crc_b] = symbolEntry;
+    }
+
+    //PROCESS OBJECT END
+
+    free(objectName);
+
+    elf_command = elf_next(object_file_elf);
+    elf_end(object_file_elf);
+  }
+  close(archive_file_descriptor);
+
+
 }
 
 void CN64Sig::ProcessLibrary(const char *path) {
@@ -429,7 +690,7 @@ void CN64Sig::ProcessObject(const char *path) {
 void CN64Sig::ProcessFile(const char *path) {
   const std::filesystem::path fs_path{path};
   if (fs_path.extension() == ".a") {
-    ProcessLibrary(path);
+    ProcessLibrary2(path);
   } else if (fs_path.extension() == ".o") {
     ProcessObject(path);
   }

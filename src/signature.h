@@ -20,6 +20,33 @@ using symbol_entry_t = struct {
   std::vector<reloc_entry_t> relocs;
 };
 
+using sig_relocation = struct {
+  uint32_t type;
+  uint32_t offset;
+  uint32_t addend;
+  bool local;
+  std::string name;
+};
+
+using sig_symbol = struct {
+  uint32_t offset;
+  uint32_t size;
+  uint32_t crc_8;
+  uint32_t crc_all;
+  std::string symbol;
+  std::vector<sig_relocation> relocations;
+};
+
+using sig_section = struct {
+  uint32_t size;
+  std::string name;
+  std::vector<sig_symbol> symbols;
+};
+
+using sig_object = struct {
+  std::string file;
+  std::vector<sig_section> sections;
+};
 
 namespace YAML {
 template <>

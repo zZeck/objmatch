@@ -33,7 +33,7 @@ class CN64Sig {
   static auto GetRelTypeName(uint8_t relType) -> const char *const;
   static void FormatAnonymousSymbol(char *symbolName);
   void ProcessLibrary(const char *path);
-  void ProcessLibrary2(const char *path);
+  std::vector<sig_object> ProcessLibrary2(const char *path);
   void ProcessObject(Elf *elf, const char *objectName);
   void ProcessObject(const char *path);
   void ProcessFile(const char *path);

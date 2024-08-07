@@ -21,16 +21,16 @@ using symbol_entry_t = struct {
 };
 
 using sig_relocation = struct {
-  uint32_t type;
-  uint32_t offset;
+  uint64_t type;
+  uint64_t offset;
   uint32_t addend;
   bool local;
   std::string name;
 };
 
 using sig_symbol = struct {
-  uint32_t offset;
-  uint32_t size;
+  uint64_t offset;
+  uint64_t size;
   uint32_t crc_8;
   uint32_t crc_all;
   std::string symbol;
@@ -38,7 +38,7 @@ using sig_symbol = struct {
 };
 
 using sig_section = struct {
-  uint32_t size;
+  uint64_t size;
   std::string name;
   std::vector<sig_symbol> symbols;
 };

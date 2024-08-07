@@ -409,10 +409,7 @@ std::vector<sig_object> CN64Sig::ProcessLibrary2(const char *path) {
         if (symbol_referencing_section_index != section_index || symbol_size == 0) {
           continue;
         }
-    
-        symbol_entry_t symbolEntry;
-        strncpy(symbolEntry.name, symbol_name, sizeof(symbolEntry.name) - 1);
-      
+          
         uint32_t lastHi16Addend = 0;
       
         auto sig_sym = sig_symbol {
@@ -552,7 +549,6 @@ std::vector<sig_object> CN64Sig::ProcessLibrary2(const char *path) {
         //}
 
         sig_sec.symbols.push_back(sig_sym);
-        m_SymbolMap[symbolEntry.crc_b] = symbolEntry;
       }
 
       sig_obj.sections.push_back(sig_sec);

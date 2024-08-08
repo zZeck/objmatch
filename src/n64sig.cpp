@@ -259,7 +259,8 @@ void CN64Sig::StripAndGetRelocsInSymbol(const char *objectName, std::vector<relo
       opcode[2] = 0x00;
       opcode[3] = 0x00;
     } else {
-      printf("# warning unhandled relocation type\n");
+      //This is being hit. Should log more context
+      //printf("# warning unhandled relocation type\n");
       continue;
       // printf("unk rel %d\n", relType);
       // exit(0);
@@ -322,15 +323,12 @@ std::vector<sig_object> CN64Sig::ProcessLibrary2(const char *path) {
       gelf_getshdr(section, &section_header);  // error if not returns &section_header?
   
       auto section_name = elf_strptr(object_file_elf, section_header_string_table_index, section_header.sh_name);
-  
-      printf("section name: %s\n", section_name);
 
       if (strcmp(section_name, ".text") == 0 ||
       strcmp(section_name, ".data") == 0 ||
       strcmp(section_name, ".rodata") == 0 ||
       strcmp(section_name, ".bss") == 0) {
         auto index = elf_ndxscn(section);
-        printf("%d\n", index);
         sections.push_back(section_relocations {
           .section = section
         });
@@ -406,7 +404,10 @@ std::vector<sig_object> CN64Sig::ProcessLibrary2(const char *path) {
         auto symbol_offset = libelf_symbol.st_value;
     
         //|| symbol_type != STT_FUNC 
-        if (symbol_referencing_section_index != section_index || symbol_size == 0) {
+        //the symbol for the section, shares its name
+        //processing it is worse than useless currently, because relocation handling 0s out the addends
+        //in the entire section
+        if (symbol_referencing_section_index != section_index || symbol_size == 0 || strcmp(symbol_name, section_name) == 0) {
           continue;
         }
           
@@ -457,46 +458,57 @@ std::vector<sig_object> CN64Sig::ProcessLibrary2(const char *path) {
       
           auto opcode = reinterpret_cast<uint8_t *>(section_data->d_buf) + relocation.r_offset;
 
+
           auto is_local = false;
-          if (rel_symbol_binding == STB_LOCAL) {
-            uint32_t addend = 0;
-            is_local = true;
+          uint32_t addend = 0;
+
+          //both STB_LOCAL and STB_GLOBAL
+          //binding types go through here
+          //but only STB_LOCAL seems to ever have an addend that is not 0
+          //perhaps this is because most globals, like function refs, will have an addend of 0?
+
+          // possibly could use libelf for this conversion using ELF_T_WORD or something?
+          // the transformation to do here, depends the platform of the elf file
+          // But not the platform I'm running on, right? because IN REGISTER, things will be in the expected order
+          // probably should add comment explaining why alternatives are bad, alignment issues, host platform issues
+          auto opcodeBE = opcode[0] << 8 * 3 | opcode[1] << 8 * 2 | opcode[2] << 8 * 1 | opcode[3] << 8 * 0;
       
-            // possibly could use libelf for this conversion using ELF_T_WORD or something?
-            // the transformation to do here, depends the platform of the elf file
-            // But not the platform I'm running on, right? because IN REGISTER, things will be in the expected order
-            // probably should add comment explaining why alternatives are bad, alignment issues, host platform issues
-            auto opcodeBE = opcode[0] << 8 * 3 | opcode[1] << 8 * 2 | opcode[2] << 8 * 1 | opcode[3] << 8 * 0;
+          if (relocation_type == R_MIPS_HI16) {
+            addend = (opcodeBE & 0xFFFF) << 16;
+            GElf_Rel relocation2;
+            //note, index + 1
+            gelf_getrel(relocation_data, relocation_index + 1, &relocation2);  // todo guard
       
-            if (relocation_type == R_MIPS_HI16) {
-              addend = (opcodeBE & 0xFFFF) << 16;
-              GElf_Rel relocation2;
-              gelf_getrel(relocation_data, relocation_index + 1, &relocation2);  // todo guard
-      
-              // next relocation must be LO16
-              auto relocation2_type = GELF_R_TYPE(relocation2.r_info);
-              if (relocation2_type != R_MIPS_LO16) {
-                exit(EXIT_FAILURE);
-              }
-      
-              auto opcode2 = reinterpret_cast<const uint8_t *>(section_data->d_buf) + relocation2.r_offset;
-              auto opcode2BE = opcode2[0] << 8 * 3 | opcode2[1] << 8 * 2 | opcode2[2] << 8 * 1 | opcode2[3] << 8 * 0;
-      
-              addend += static_cast<int16_t>(opcode2BE & 0xFFFF);
-              lastHi16Addend = addend;
-      
-              // printf("%08X\n", addend);
-            } else if (relocation_type == R_MIPS_LO16) {
-              addend = lastHi16Addend;
-            } else if (relocation_type == R_MIPS_26) {
-              addend = (opcodeBE & 0x03FFFFFF) << 2;
+            // next relocation must be LO16
+            auto relocation2_type = GELF_R_TYPE(relocation2.r_info);
+            if (relocation2_type != R_MIPS_LO16) {
+              exit(EXIT_FAILURE);
             }
       
-            snprintf(relSymbolName, sizeof(relSymbolName), "%s_%s_%04X", object_path.stem().c_str(), &rel_symbol_name[1], addend);
+            auto opcode2 = reinterpret_cast<const uint8_t *>(section_data->d_buf) + relocation2.r_offset;
+            auto opcode2BE = opcode2[0] << 8 * 3 | opcode2[1] << 8 * 2 | opcode2[2] << 8 * 1 | opcode2[3] << 8 * 0;
       
-            // printf("# %08X\n", relSymbol->Value());
+            addend += static_cast<int16_t>(opcode2BE & 0xFFFF);
+            lastHi16Addend = addend;
+      
+            // printf("%08X\n", addend);
+          } else if (relocation_type == R_MIPS_LO16) {
+            addend = lastHi16Addend;
+          } else if (relocation_type == R_MIPS_26) {
+            addend = (opcodeBE & 0x03FFFFFF) << 2;
           }
-      
+           
+          if (rel_symbol_binding == STB_LOCAL) {
+            is_local = true;
+            snprintf(relSymbolName, sizeof(relSymbolName), "%s_%s_%04X", object_path.stem().c_str(), &rel_symbol_name[1], addend);
+          }
+
+          //THIS IS BAD DESIGN
+          //mutates the elf buffer
+          //If I want to try out new code
+          //now the buffer is messed up and the relocation addend is wiped
+          //Also, the .text symbol covers the range of all the function data
+          //and processing it causes all addends to be wiped
           // set addend to 0 before crc
           if (relocation_type == R_MIPS_HI16 || relocation_type == R_MIPS_LO16) {
             opcode[2] = 0x00;
@@ -507,7 +519,8 @@ std::vector<sig_object> CN64Sig::ProcessLibrary2(const char *path) {
             opcode[2] = 0x00;
             opcode[3] = 0x00;
           } else {
-            printf("# warning unhandled relocation type\n");
+            //Need to log more context
+            //printf("# warning unhandled relocation type\n");
             continue;
             // printf("unk rel %d\n", relType);
             // exit(0);
@@ -516,7 +529,7 @@ std::vector<sig_object> CN64Sig::ProcessLibrary2(const char *path) {
           sig_sym.relocations.push_back(sig_relocation {
             .type = relocation_type,
             .offset = relocation.r_offset - libelf_symbol.st_value,
-            .addend = 0,
+            .addend = addend,
             .local = is_local,
             .name = std::string(relSymbolName)
           });
@@ -526,14 +539,19 @@ std::vector<sig_object> CN64Sig::ProcessLibrary2(const char *path) {
 
         //// STRIP AND RELCOS END
 
-        boost::crc_32_type result;
-
-        result.process_bytes(&reinterpret_cast<uint8_t *>(section_data->d_buf)[symbol_offset],
-                             std::min(reinterpret_cast<uint64_t>(symbol_size), reinterpret_cast<uint64_t>(UINT64_C(8))));
-        sig_sym.crc_8 = result.checksum();
-        result.reset();
-        result.process_bytes(&reinterpret_cast<uint8_t *>(section_data->d_buf)[symbol_offset], symbol_size);
-        sig_sym.crc_all = result.checksum();
+        //.bss had no data
+        //Later, this should take relocations into account
+        //rather than zeroing out that data out.
+        //This would avoid mutation of the buffer.
+        if(section_data != nullptr && section_data->d_buf != nullptr) {
+          boost::crc_32_type result;
+          result.process_bytes(&reinterpret_cast<uint8_t *>(section_data->d_buf)[symbol_offset],
+                               std::min(reinterpret_cast<uint64_t>(symbol_size), reinterpret_cast<uint64_t>(UINT64_C(8))));
+          sig_sym.crc_8 = result.checksum();
+          result.reset();
+          result.process_bytes(&reinterpret_cast<uint8_t *>(section_data->d_buf)[symbol_offset], symbol_size);
+          sig_sym.crc_all = result.checksum();
+        }
     
         //m_NumProcessedSymbols++;
     
@@ -663,6 +681,8 @@ void CN64Sig::ProcessObject(Elf *elf, const char *objectName) {
     symbol_entry_t symbolEntry;
     strncpy(symbolEntry.name, symbol_name, sizeof(symbolEntry.name) - 1);
 
+    printf("symbol_name: %s\n", symbol_name);
+
     StripAndGetRelocsInSymbol(objectName, symbolEntry.relocs, &libelf_symbol, elf);
 
     boost::crc_32_type result;
@@ -717,7 +737,15 @@ void CN64Sig::ProcessObject(const char *path) {
 void CN64Sig::ProcessFile(const char *path) {
   const std::filesystem::path fs_path{path};
   if (fs_path.extension() == ".a") {
-    ProcessLibrary2(path);
+    //printf("first pass\n");
+    auto blah = ProcessLibrary2(path);
+    YAML::Node node;
+    node = blah;
+    YAML::Emitter emitter;
+    emitter << node;
+    printf("%s\n", emitter.c_str());
+    //printf("second pass\n");
+    //ProcessLibrary(path);
   } else if (fs_path.extension() == ".o") {
     ProcessObject(path);
   }

@@ -18,7 +18,7 @@
 #include <set>
 #include <vector>
 
-#include "signaturefile.h"
+#include "signature.h"
 
 using n64sym_output_fmt_t = enum { N64SYM_FMT_DEFAULT, N64SYM_FMT_PJ64, N64SYM_FMT_NEMU, N64SYM_FMT_ARMIPS, N64SYM_FMT_N64SPLIT, N64SYM_FMT_SPLAT };
 
@@ -61,8 +61,8 @@ class CN64Sym {
 
   using search_result_t = struct {
     uint32_t address;  // from jump target
-    uint32_t size;     // data match size
-    char name[64];
+    uint64_t size;     // data match size
+    std::string name;
   };
 
   using partial_match_t = struct {
@@ -84,27 +84,15 @@ class CN64Sym {
 
   n64sym_output_fmt_t m_OutputFormat{N64SYM_FMT_DEFAULT};
 
-  size_t m_NumSymbolsToCheck{0};
-  size_t m_NumSymbolsChecked{0};
-
   std::vector<search_result_t> m_Results;
   std::vector<const char*> m_LibPaths;
   std::set<uint32_t> m_LikelyFunctionOffsets;
 
-  CSignatureFile m_BuiltinSigs;
-
   void DumpResults();
-  void ScanRecursive(const char* path);
 
-  void ProcessFile(const char* path);
-  void ProcessSignatureFile(const char* path);
-  void ProcessSignatureFile(CSignatureFile& sigFile);
+  void ProcessSignatureFile2(std::vector<sig_object> sigFile);
 
-  auto TestSignatureSymbol(CSignatureFile& sigFile, size_t nSymbol, uint32_t offset) -> bool;
-
-  void TallyNumSymbolsToCheck();
-  void CountSymbolsRecursive(const char* path);
-  void CountSymbolsInFile(const char* path);
+  auto TestSignatureSymbol2(sig_symbol sig_sym, std::string object_name, uint32_t offset) -> bool;
 
   auto AddResult(search_result_t result) -> bool;
   static auto ResultCmp(search_result_t a, search_result_t b) -> bool;
@@ -114,5 +102,8 @@ class CN64Sym {
   void Output(const char* format, ...);
   static void ClearLine(int nChars);
 };
+
+static void ReadStrippedWord(uint8_t *dst, const uint8_t *src, int relType);
+auto TestSymbol(sig_symbol sig_sym, const uint8_t *buffer) -> bool;
 
 #endif  // N64SYM_H

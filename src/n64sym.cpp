@@ -21,8 +21,6 @@
 #include <libelf.h>
 #include <gelf.h>
 
-#include "signaturefile.h"
-
 #ifdef WIN32
 #include <windirent.h>
 #else
@@ -52,11 +50,6 @@
 
 
 extern const char gBuiltinSignatureFile[];
-
-auto IsFileWithSymbols(const char *path) -> bool {
-  const std::filesystem::path fs_path { path };
-  return fs_path.extension() == ".a" || fs_path.extension() == ".o" || fs_path.extension() == ".sig";
-}
 
 CN64Sym::CN64Sym() : m_Output(&std::cout) { /*m_BuiltinSigs.LoadFromMemory(gBuiltinSignatureFile);*/ }
 
@@ -190,14 +183,18 @@ auto CN64Sym::Run() -> bool {
     // todo JALs?
   }
 
-  TallyNumSymbolsToCheck();
-
-  if (m_bUseBuiltinSignatures) {
-    ProcessSignatureFile(m_BuiltinSigs);
-  }
+  //if (m_bUseBuiltinSignatures) {
+  //  ProcessSignatureFile(m_BuiltinSigs);
+  //}
 
   for (auto& m_LibPath : m_LibPaths) {
-    ScanRecursive(m_LibPath);
+    const std::filesystem::path fs_path { m_LibPath };
+    if (fs_path.extension() == ".sig") {
+      YAML::Node node = YAML::LoadFile(fs_path);
+      auto sigs = node.as<std::vector<sig_object>>();
+
+      ProcessSignatureFile2(sigs);
+    }
   }
 
   SortResults();
@@ -210,106 +207,59 @@ void CN64Sym::DumpResults() {
   switch (m_OutputFormat) {
     case N64SYM_FMT_PJ64:
       for (auto& result : m_Results) {
-        Output("%08X,code,%s\n", result.address, result.name);
+        Output("%08X,code,%s\n", result.address, result.name.c_str());
       }
       break;
     case N64SYM_FMT_NEMU:
       Output("Root\n");
       Output("\tCPU\n");
       for (auto& result : m_Results) {
-        Output("\t\tCPU 0x%08X: %s\n", result.address, result.name);
+        Output("\t\tCPU 0x%08X: %s\n", result.address, result.name.c_str());
       }
       Output("\tMemory\n");
       Output("\tRSP\n");
       break;
     case N64SYM_FMT_ARMIPS:
       for (auto& result : m_Results) {
-        Output(".definelabel %s, 0x%08X\n", result.name, result.address);
+        Output(".definelabel %s, 0x%08X\n", result.name.c_str(), result.address);
       }
       break;
     case N64SYM_FMT_N64SPLIT:
       Output("labels:\n");
       for (auto& result : m_Results) {
-        Output("   - [0x%08X, \"%s\"]\n", result.address, result.name);
+        Output("   - [0x%08X, \"%s\"]\n", result.address, result.name.c_str());
       }
       break;
     case N64SYM_FMT_SPLAT:
       for (auto& result : m_Results) {
-        Output("%s = 0x%08X;\n", result.name, result.address);
+        Output("%s = 0x%08X;\n", result.name.c_str(), result.address);
       }
       break;
     case N64SYM_FMT_DEFAULT:
     default:
       for (auto& result : m_Results) {
-        Output("%08X %s\n", result.address, result.name);
+        Output("%08X %s\n", result.address, result.name.c_str());
       }
       break;
   }
 }
 
-void CN64Sym::ScanRecursive(const char* path) {
-  if (IsFileWithSymbols(path)) {
-    ProcessFile(path);
-    return;
-  }
-}
-
-void CN64Sym::ProcessFile(const char* path) {
-  const std::filesystem::path fs_path { path };
-  if (fs_path.extension() == ".sig") {
-    ProcessSignatureFile(path);
-  }
-}
-
-void CN64Sym::ProcessSignatureFile(const char* path) {
-  CSignatureFile sigFile;
-
-  if (sigFile.Load(path)) {
-    ProcessSignatureFile(sigFile);
-  }
-}
-
-void CN64Sym::ProcessSignatureFile(CSignatureFile& sigFile) {
-  size_t const numSymbols = sigFile.GetNumSymbols();
-
-  const char* statusDescription = "(built-in signatures)";
-  int percentDone = 0;
-  int statusLineLen = printf("[  0%%] %s", statusDescription);
-
-  for (size_t nSymbol = 0; nSymbol < numSymbols; nSymbol++) {
-    uint32_t const symbolSize = sigFile.GetSymbolSize(nSymbol);
-    uint32_t const endOffset = m_BinarySize - symbolSize;
-    char symbolName[128];
-    sigFile.GetSymbolName(nSymbol, symbolName, sizeof(symbolName));
-
-    int const percentNow = static_cast<int>((static_cast<float>(nSymbol) / numSymbols) * 100);
-    if (percentNow > percentDone) {
-      ClearLine(statusLineLen);
-      statusLineLen = printf("[%3d%%] %s", percentDone, statusDescription);
-      percentDone = percentNow;
-    }
-
-    for (auto offset : m_LikelyFunctionOffsets) {
-      if (TestSignatureSymbol(sigFile, nSymbol, offset)) {
-        goto next_symbol;
-      }
-    }
-
-    if (m_bThoroughScan) {
-      for (uint32_t offset = 0; offset < endOffset; offset += 4) {
-        if (TestSignatureSymbol(sigFile, nSymbol, offset)) {
-          goto next_symbol;
+void CN64Sym::ProcessSignatureFile2(std::vector<sig_object> sigFile) {
+  for (auto sig_obj : sigFile) {
+    for(auto sig_section : sig_obj.sections) {
+      if(sig_section.name != ".text") continue;
+      for(auto sig_sym : sig_section.symbols) {
+        for (auto offset : m_LikelyFunctionOffsets) {
+          //should have a condition on the offset loop, so finding
+          //result stops search? symbol could theoretically have been linked in more than once
+          TestSignatureSymbol2(sig_sym, sig_obj.file, offset);
         }
       }
     }
-
-  next_symbol:;
   }
-
-  ClearLine(statusLineLen);
 }
 
-auto CN64Sym::TestSignatureSymbol(CSignatureFile& sigFile, size_t nSymbol, uint32_t offset) -> bool {
+auto CN64Sym::TestSignatureSymbol2(sig_symbol sig_sym, std::string object_name, uint32_t offset) -> bool {
   typedef struct {
     uint32_t address;
     bool haveHi16;
@@ -317,43 +267,47 @@ auto CN64Sym::TestSignatureSymbol(CSignatureFile& sigFile, size_t nSymbol, uint3
   } test_t;
   std::map<std::string, test_t> relocMap;
 
-  if (sigFile.TestSymbol(nSymbol, &m_Binary[offset])) {
-    search_result_t result;
-    result.address = m_HeaderSize + offset;
-    result.size = sigFile.GetSymbolSize(nSymbol);
-    sigFile.GetSymbolName(nSymbol, result.name, sizeof(result.name));
-    AddResult(result);
+  if (TestSymbol(sig_sym, &m_Binary[offset])) {
+    AddResult(search_result_t {
+      .address = m_HeaderSize + offset,
+      .size = sig_sym.size,
+      .name = sig_sym.symbol
+    });
 
     // add results from relocations
-    for (size_t nReloc = 0; nReloc < sigFile.GetNumRelocs(nSymbol); nReloc++) {
-      char relocName[128];
-      sigFile.GetRelocName(nSymbol, nReloc, relocName, sizeof(relocName));
-      uint8_t const relocType = sigFile.GetRelocType(nSymbol, nReloc);
-      uint32_t const relocOffset = sigFile.GetRelocOffset(nSymbol, nReloc);
-
-      auto temp = &m_Binary[offset + relocOffset];
+    for (auto rel : sig_sym.relocations) {
+      auto temp = &m_Binary[offset + rel.offset];
       auto temp1 = *reinterpret_cast<uint32_t*>(temp);
 
       uint32_t const opcode = bswap32(temp1);
 
-      switch (relocType) {
+      auto relocation_name = rel.name;
+
+      if(rel.local) {
+        const std::filesystem::path fs_path { object_name };
+        char relocName[128];
+        snprintf(relocName, sizeof(relocName), "%s_%s_%04X", fs_path.stem().c_str(), &rel.name.c_str()[1], rel.addend);
+        relocation_name = std::string(relocName);
+      }
+
+      switch (rel.type) {
         case R_MIPS_HI16:
-          if (!relocMap.contains(relocName)) {
-            relocMap[relocName].haveHi16 = true;
-            relocMap[relocName].haveLo16 = false;
+          if (!relocMap.contains(relocation_name)) {
+            relocMap[relocation_name].haveHi16 = true;
+            relocMap[relocation_name].haveLo16 = false;
           }
-          relocMap[relocName].address = (opcode & 0x0000FFFF) << 16;
+          relocMap[relocation_name].address = (opcode & 0x0000FFFF) << 16;
           break;
         case R_MIPS_LO16:
-          if (relocMap.contains(relocName)) {
-            relocMap[relocName].address += static_cast<int16_t>(opcode & 0x0000FFFF);
+          if (relocMap.contains(relocation_name)) {
+            relocMap[relocation_name].address += static_cast<int16_t>(opcode & 0x0000FFFF);
           } else {
             printf("missing hi16?");
             exit(0);
           }
           break;
         case R_MIPS_26:
-          relocMap[relocName].address = (m_HeaderSize & 0xF0000000) + ((opcode & 0x03FFFFFF) << 2);
+          relocMap[relocation_name].address = (m_HeaderSize & 0xF0000000) + ((opcode & 0x03FFFFFF) << 2);
           break;
       }
 
@@ -361,46 +315,17 @@ auto CN64Sym::TestSignatureSymbol(CSignatureFile& sigFile, size_t nSymbol, uint3
     }
 
     for (auto& i : relocMap) {
-      search_result_t relocResult;
-      relocResult.address = i.second.address;
-      relocResult.size = 0;
-      strncpy(relocResult.name, i.first.c_str(), sizeof(relocResult.name) - 1);
-      AddResult(relocResult);
+      AddResult(search_result_t {
+        .address = i.second.address,
+        .size = 0,
+        .name = i.first
+      });
     }
     // printf("-------\n");
 
     return true;
   }
   return false;
-}
-
-void CN64Sym::TallyNumSymbolsToCheck() {
-  m_NumSymbolsToCheck = 0;
-
-  if (m_bUseBuiltinSignatures) {
-    m_NumSymbolsToCheck += m_BuiltinSigs.GetNumSymbols();
-  }
-
-  for (auto& m_LibPath : m_LibPaths) {
-    CountSymbolsRecursive(m_LibPath);
-  }
-}
-
-void CN64Sym::CountSymbolsInFile(const char* path) {
-  const std::filesystem::path fs_path { path };
-  if (fs_path.extension() == ".sig") {
-    CSignatureFile sigFile;
-    if (sigFile.Load(path)) {
-      m_NumSymbolsToCheck += sigFile.GetNumSymbols();
-    }
-  }
-}
-
-void CN64Sym::CountSymbolsRecursive(const char* path) {
-  if (IsFileWithSymbols(path)) {
-    CountSymbolsInFile(path);
-    return;
-  }
 }
 
 auto CN64Sym::AddResult(search_result_t result) -> bool {
@@ -455,3 +380,107 @@ void CN64Sym::Output(const char* format, ...) {
   *m_Output << str;
   delete[] str;
 }
+
+
+void ReadStrippedWord(uint8_t *dst, const uint8_t *src, int relType) {
+  memcpy(dst, src, 4);
+
+  switch (relType) {
+    case 4:
+      // targ26
+      dst[0] &= 0xFC;
+      dst[1] = 0x00;
+      dst[2] = 0x00;
+      dst[3] = 0x00;
+      break;
+    case 5:
+    case 6:
+      // hi/lo16
+      dst[2] = 0x00;
+      dst[3] = 0x00;
+      break;
+  }
+}
+
+auto TestSymbol(sig_symbol symbol, const uint8_t *buffer) -> bool {
+  boost::crc_32_type resultA;
+  boost::crc_32_type resultB;
+
+  uint32_t crcA = 0;
+  uint32_t crcB = 0;
+
+  if (symbol.relocations.size() == 0) {
+    resultA.process_bytes(buffer, std::min(symbol.size, reinterpret_cast<uint64_t>(UINT64_C(8))));
+    auto crcA = resultA.checksum();
+
+    if (symbol.crc_8 != crcA) {
+      return false;
+    }
+
+    resultB.process_bytes(buffer, symbol.size);
+    auto crcB = resultB.checksum();
+
+    return (symbol.crc_all == crcB);
+  }
+
+  size_t offset = 0;
+
+  auto reloc = symbol.relocations.begin();
+  uint64_t const crcA_limit = std::min(symbol.size, reinterpret_cast<uint64_t>(UINT64_C(8)));
+
+  // resultA.reset();
+  while (offset < crcA_limit && reloc != symbol.relocations.end()) {
+    if (offset < reloc->offset) {
+      // read up to relocated op or crcA_limit
+      resultA.process_bytes(&buffer[offset], std::min(reloc->offset, crcA_limit) - offset);
+      resultB.process_bytes(&buffer[offset], std::min(reloc->offset, crcA_limit) - offset);
+
+      offset = std::min(reloc->offset, crcA_limit);
+    } else if (offset == reloc->offset) {
+      // strip and read relocated op
+      uint8_t op[4];
+      ReadStrippedWord(op, &buffer[offset], reloc->type);
+      resultA.process_bytes(op, 4);
+      resultB.process_bytes(op, 4);
+      offset += 4;
+      reloc++;
+    }
+  }
+
+  if (offset < crcA_limit) {
+    resultA.process_bytes(&buffer[offset], crcA_limit - offset);
+    resultB.process_bytes(&buffer[offset], crcA_limit - offset);
+    offset = crcA_limit;
+  }
+
+  crcA = resultA.checksum();
+
+  if (symbol.crc_8 != crcA) {
+    return false;
+  }
+
+  while (offset < symbol.size && reloc != symbol.relocations.end()) {
+    if (offset < reloc->offset) {
+      // read up to relocated op
+      resultB.process_bytes(&buffer[offset], reloc->offset - offset);
+      offset = reloc->offset;
+    } else if (offset == reloc->offset) {
+      // strip and read relocated op
+      uint8_t op[4];
+      ReadStrippedWord(op, &buffer[offset], reloc->type);
+      resultB.process_bytes(op, sizeof(op));
+      offset += 4;
+      reloc++;
+    }
+  }
+
+  if (offset < symbol.size) {
+    resultB.process_bytes(&buffer[offset], symbol.size - offset);
+    offset = symbol.size;
+  }
+
+  crcB = resultB.checksum();
+
+  return (symbol.crc_all == crcB);
+}
+

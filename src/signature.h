@@ -134,7 +134,7 @@ struct convert<sig_symbol> {
     sig_symbol.offset = node["offset"].as<uint64_t>();
     sig_symbol.size = node["size"].as<uint64_t>();
     sig_symbol.crc_8 = node["crc_8"].as<uint32_t>();
-    sig_symbol.crc_all = node["crc_8"].as<uint32_t>();
+    sig_symbol.crc_all = node["crc_all"].as<uint32_t>();
     sig_symbol.symbol = node["symbol"].as<std::string>();
     sig_symbol.relocations = node["relocations"].as<std::vector<sig_relocation>>();
     return true;

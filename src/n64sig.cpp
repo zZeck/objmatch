@@ -448,16 +448,11 @@ std::vector<sig_object> CN64Sig::ProcessLibrary2(const char *path) {
       
           auto relocation_type = GELF_R_TYPE(relocation.r_info);
       
-          char relSymbolName[128];
-      
-          strncpy(relSymbolName, rel_symbol_name, sizeof(relSymbolName) - 1);
-      
           //HOW TO HANDLE OTHER TYPES NOW?
           if (section_data->d_type != ELF_T_BYTE) {
           }  // this is an error
       
           auto opcode = reinterpret_cast<uint8_t *>(section_data->d_buf) + relocation.r_offset;
-
 
           auto is_local = false;
           uint32_t addend = 0;
@@ -500,7 +495,6 @@ std::vector<sig_object> CN64Sig::ProcessLibrary2(const char *path) {
            
           if (rel_symbol_binding == STB_LOCAL) {
             is_local = true;
-            snprintf(relSymbolName, sizeof(relSymbolName), "%s_%s_%04X", object_path.stem().c_str(), &rel_symbol_name[1], addend);
           }
 
           //THIS IS BAD DESIGN
@@ -531,7 +525,7 @@ std::vector<sig_object> CN64Sig::ProcessLibrary2(const char *path) {
             .offset = relocation.r_offset - libelf_symbol.st_value,
             .addend = addend,
             .local = is_local,
-            .name = std::string(relSymbolName)
+            .name = std::string(rel_symbol_name)
           });
         }
 
@@ -541,7 +535,7 @@ std::vector<sig_object> CN64Sig::ProcessLibrary2(const char *path) {
 
         //.bss had no data
         //Later, this should take relocations into account
-        //rather than zeroing out that data out.
+        //rather than zeroing out that data out before this executes, in the rel handling.
         //This would avoid mutation of the buffer.
         if(section_data != nullptr && section_data->d_buf != nullptr) {
           boost::crc_32_type result;

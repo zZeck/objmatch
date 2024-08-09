@@ -12,3 +12,4 @@ out
 log
 log*.sig
 log*.yaml
+testout

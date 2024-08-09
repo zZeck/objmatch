@@ -1,12 +1,3 @@
-/*
-
-    n64sig
-    Signature file generator for n64sym
-    shygoo 2020
-    License: MIT
-
-*/
-
 #include <cstdio>
 #include <cstdlib>
 
@@ -16,7 +7,7 @@
 auto main(int argc, const char *argv[]) -> int {
   if (argc < 2) {
     printf(
-        "n64sig - signature file generator for n64sym (https://github.com/shygoo/n64sym)\n\n"
+        "n64sig - signature file generator for n64sym ()\n\n"
         "  Usage: n64sig [options]\n\n"
         "  Options:\n"
         "    -l <lib/obj path>     add a library/object path\n"
@@ -58,9 +49,6 @@ auto main(int argc, const char *argv[]) -> int {
           return EXIT_FAILURE;
         }
         argi++;
-        break;
-      case 'v':
-        n64sig.SetVerbose(true);
         break;
     }
   }

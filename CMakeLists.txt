@@ -24,7 +24,6 @@ add_executable(
 n64sym
 src/n64sym_main.cpp
 src/n64sym.cpp
-src/builtin_signatures_include.s
 )
 
 add_executable(

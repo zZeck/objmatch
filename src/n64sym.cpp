@@ -1,31 +1,16 @@
-/*
-
-    n64sym
-    Symbol identification tool for N64 games
-    shygoo 2017, 2020
-    License: MIT
-
-*/
-
 #include "n64sym.h"
 
+#include <fcntl.h>
+#include <gelf.h>
+#include <libelf.h>
+#include <unistd.h>
+
+#include <boost/crc.hpp>
 #include <cstdio>
 #include <fstream>
 #include <iostream>
 #include <map>
 #include <set>
-
-#include <boost/crc.hpp>
-#include <fcntl.h>
-#include <unistd.h>
-#include <libelf.h>
-#include <gelf.h>
-
-#ifdef WIN32
-#include <windirent.h>
-#else
-#include <dirent.h>
-#endif
 #include <filesystem>
 
 #ifndef bswap32
@@ -47,11 +32,6 @@
 #define bswap16(n) (((unsigned)n & 0xFF00) >> 8 | n << 8)
 #endif
 #endif
-
-
-extern const char gBuiltinSignatureFile[];
-
-CN64Sym::CN64Sym() : m_Output(&std::cout) { /*m_BuiltinSigs.LoadFromMemory(gBuiltinSignatureFile);*/ }
 
 CN64Sym::~CN64Sym() { delete[] m_Binary; }
 
@@ -75,7 +55,7 @@ auto CN64Sym::LoadBinary(const char* binPath) -> bool {
   file.seekg(0, std::ifstream::beg);
   file.read(reinterpret_cast<char*>(m_Binary), m_BinarySize);
 
-  const std::filesystem::path fs_path { binPath };
+  const std::filesystem::path fs_path{binPath};
   if ((fs_path.extension() == ".z64" || fs_path.extension() == ".n64" || fs_path.extension() == ".v64") && !m_bOverrideHeaderSize) {
     if (m_BinarySize < 0x101000) {
       delete[] m_Binary;
@@ -183,17 +163,17 @@ auto CN64Sym::Run() -> bool {
     // todo JALs?
   }
 
-  //if (m_bUseBuiltinSignatures) {
-  //  ProcessSignatureFile(m_BuiltinSigs);
-  //}
+  // if (m_bUseBuiltinSignatures) {
+  //   ProcessSignatureFile(m_BuiltinSigs);
+  // }
 
   for (auto& m_LibPath : m_LibPaths) {
-    const std::filesystem::path fs_path { m_LibPath };
+    const std::filesystem::path fs_path{m_LibPath};
     if (fs_path.extension() == ".sig") {
       YAML::Node node = YAML::LoadFile(fs_path);
       auto sigs = node.as<std::vector<sig_object>>();
 
-      ProcessSignatureFile2(sigs);
+      ProcessSignatureFile(sigs);
     }
   }
 
@@ -244,22 +224,22 @@ void CN64Sym::DumpResults() {
   }
 }
 
-void CN64Sym::ProcessSignatureFile2(std::vector<sig_object> sigFile) {
+void CN64Sym::ProcessSignatureFile(std::vector<sig_object> sigFile) {
   for (auto sig_obj : sigFile) {
-    for(auto sig_section : sig_obj.sections) {
-      if(sig_section.name != ".text") continue;
-      for(auto sig_sym : sig_section.symbols) {
+    for (auto sig_section : sig_obj.sections) {
+      if (sig_section.name != ".text") continue;
+      for (auto sig_sym : sig_section.symbols) {
         for (auto offset : m_LikelyFunctionOffsets) {
-          //should have a condition on the offset loop, so finding
-          //result stops search? symbol could theoretically have been linked in more than once
-          TestSignatureSymbol2(sig_sym, sig_obj.file, offset);
+          // should have a condition on the offset loop, so finding
+          // result stops search? symbol could theoretically have been linked in more than once
+          TestSignatureSymbol(sig_sym, sig_obj.file, offset);
         }
       }
     }
   }
 }
 
-auto CN64Sym::TestSignatureSymbol2(sig_symbol sig_sym, std::string object_name, uint32_t offset) -> bool {
+auto CN64Sym::TestSignatureSymbol(sig_symbol sig_sym, std::string object_name, uint32_t offset) -> bool {
   typedef struct {
     uint32_t address;
     bool haveHi16;
@@ -268,11 +248,7 @@ auto CN64Sym::TestSignatureSymbol2(sig_symbol sig_sym, std::string object_name, 
   std::map<std::string, test_t> relocMap;
 
   if (TestSymbol(sig_sym, &m_Binary[offset])) {
-    AddResult(search_result_t {
-      .address = m_HeaderSize + offset,
-      .size = sig_sym.size,
-      .name = sig_sym.symbol
-    });
+    AddResult(search_result_t{.address = m_HeaderSize + offset, .size = sig_sym.size, .name = sig_sym.symbol});
 
     // add results from relocations
     for (auto rel : sig_sym.relocations) {
@@ -283,8 +259,8 @@ auto CN64Sym::TestSignatureSymbol2(sig_symbol sig_sym, std::string object_name, 
 
       auto relocation_name = rel.name;
 
-      if(rel.local) {
-        const std::filesystem::path fs_path { object_name };
+      if (rel.local) {
+        const std::filesystem::path fs_path{object_name};
         char relocName[128];
         snprintf(relocName, sizeof(relocName), "%s_%s_%04X", fs_path.stem().c_str(), &rel.name.c_str()[1], rel.addend);
         relocation_name = std::string(relocName);
@@ -315,11 +291,7 @@ auto CN64Sym::TestSignatureSymbol2(sig_symbol sig_sym, std::string object_name, 
     }
 
     for (auto& i : relocMap) {
-      AddResult(search_result_t {
-        .address = i.second.address,
-        .size = 0,
-        .name = i.first
-      });
+      AddResult(search_result_t{.address = i.second.address, .size = 0, .name = i.first});
     }
     // printf("-------\n");
 
@@ -381,8 +353,7 @@ void CN64Sym::Output(const char* format, ...) {
   delete[] str;
 }
 
-
-void ReadStrippedWord(uint8_t *dst, const uint8_t *src, int relType) {
+void ReadStrippedWord(uint8_t* dst, const uint8_t* src, int relType) {
   memcpy(dst, src, 4);
 
   switch (relType) {
@@ -402,7 +373,7 @@ void ReadStrippedWord(uint8_t *dst, const uint8_t *src, int relType) {
   }
 }
 
-auto TestSymbol(sig_symbol symbol, const uint8_t *buffer) -> bool {
+auto TestSymbol(sig_symbol symbol, const uint8_t* buffer) -> bool {
   boost::crc_32_type resultA;
   boost::crc_32_type resultB;
 
@@ -483,4 +454,3 @@ auto TestSymbol(sig_symbol symbol, const uint8_t *buffer) -> bool {
 
   return (symbol.crc_all == crcB);
 }
-

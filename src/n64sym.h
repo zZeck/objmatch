@@ -1,15 +1,3 @@
-/*
-
-    n64sym
-    Symbol identifier tool for N64 games
-    shygoo 2017, 2020
-    License: MIT
-
-*/
-
-#ifndef N64SYM_H
-#define N64SYM_H
-
 #include <algorithm>
 #include <array>
 #include <cstdarg>
@@ -17,6 +5,7 @@
 #include <fstream>
 #include <set>
 #include <vector>
+#include <iostream>
 
 #include "signature.h"
 
@@ -24,7 +13,6 @@ using n64sym_output_fmt_t = enum { N64SYM_FMT_DEFAULT, N64SYM_FMT_PJ64, N64SYM_F
 
 class CN64Sym {
  public:
-  CN64Sym();
   ~CN64Sym();
   auto LoadBinary(const char* binPath) -> bool;
   void AddLibPath(const char* libPath);
@@ -35,21 +23,19 @@ class CN64Sym {
   void SetHeaderSize(uint32_t headerSize);
   auto SetOutputPath(const char* path) -> bool;
   auto Run() -> bool;
-  
+
  private:
   using n64sym_fmt_lut_t = struct {
     const char* name;
     n64sym_output_fmt_t fmt;
   };
 
-  static constexpr std::array<n64sym_fmt_lut_t, 6> FormatNames = {{
-    { .name = "default", .fmt = N64SYM_FMT_DEFAULT},
-    { .name = "pj64", .fmt = N64SYM_FMT_PJ64},
-    { .name = "nemu", .fmt = N64SYM_FMT_NEMU},
-    { .name = "armips", .fmt = N64SYM_FMT_ARMIPS},
-    { .name = "n64split", .fmt = N64SYM_FMT_N64SPLIT},
-    { .name = "splat", .fmt = N64SYM_FMT_SPLAT}
-  }};
+  static constexpr std::array<n64sym_fmt_lut_t, 6> FormatNames = {{{.name = "default", .fmt = N64SYM_FMT_DEFAULT},
+                                                                   {.name = "pj64", .fmt = N64SYM_FMT_PJ64},
+                                                                   {.name = "nemu", .fmt = N64SYM_FMT_NEMU},
+                                                                   {.name = "armips", .fmt = N64SYM_FMT_ARMIPS},
+                                                                   {.name = "n64split", .fmt = N64SYM_FMT_N64SPLIT},
+                                                                   {.name = "splat", .fmt = N64SYM_FMT_SPLAT}}};
 
   using obj_processing_context_t = struct {
     CN64Sym* mt_this;
@@ -79,7 +65,7 @@ class CN64Sym {
   bool m_bThoroughScan{false};
   bool m_bOverrideHeaderSize{false};
 
-  std::ostream* m_Output;
+  std::ostream *m_Output = &std::cout;
   std::ofstream m_OutputFile;
 
   n64sym_output_fmt_t m_OutputFormat{N64SYM_FMT_DEFAULT};
@@ -90,9 +76,9 @@ class CN64Sym {
 
   void DumpResults();
 
-  void ProcessSignatureFile2(std::vector<sig_object> sigFile);
+  void ProcessSignatureFile(std::vector<sig_object> sigFile);
 
-  auto TestSignatureSymbol2(sig_symbol sig_sym, std::string object_name, uint32_t offset) -> bool;
+  auto TestSignatureSymbol(sig_symbol sig_sym, std::string object_name, uint32_t offset) -> bool;
 
   auto AddResult(search_result_t result) -> bool;
   static auto ResultCmp(search_result_t a, search_result_t b) -> bool;
@@ -103,7 +89,5 @@ class CN64Sym {
   static void ClearLine(int nChars);
 };
 
-static void ReadStrippedWord(uint8_t *dst, const uint8_t *src, int relType);
-auto TestSymbol(sig_symbol sig_sym, const uint8_t *buffer) -> bool;
-
-#endif  // N64SYM_H
+static void ReadStrippedWord(uint8_t* dst, const uint8_t* src, int relType);
+auto TestSymbol(sig_symbol sig_sym, const uint8_t* buffer) -> bool;

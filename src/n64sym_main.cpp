@@ -1,12 +1,3 @@
-/*
-
-    n64sym
-    Symbol identification tool for N64 games
-    shygoo 2017, 2020
-    License: MIT
-
-*/
-
 #include <cstdio>
 #include <cstdlib>
 

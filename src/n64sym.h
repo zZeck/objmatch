@@ -8,6 +8,7 @@
 #include <iostream>
 
 #include "signature.h"
+#include "splat_out.h"
 
 using n64sym_output_fmt_t = enum { N64SYM_FMT_DEFAULT, N64SYM_FMT_PJ64, N64SYM_FMT_NEMU, N64SYM_FMT_ARMIPS, N64SYM_FMT_N64SPLIT, N64SYM_FMT_SPLAT };
 
@@ -56,6 +57,24 @@ class CN64Sym {
     int nBytesMatched;
   };
 
+  enum rel_info {
+    not_rel,
+    local_rel,
+    global_rel
+  };
+
+  using section_guess = struct {
+    uint64_t rom_offset;
+    uint64_t section_vram;
+    uint64_t symbol_offset;
+    uint64_t section_offset;
+    uint64_t section_size;
+    rel_info rel;
+    std::string symbol_name;
+    std::string section_name;
+    std::string object_name;
+  };
+
   uint8_t* m_Binary{nullptr};
   size_t m_BinarySize{0};
   uint32_t m_HeaderSize{0x80000000};
@@ -76,9 +95,9 @@ class CN64Sym {
 
   void DumpResults();
 
-  void ProcessSignatureFile(std::vector<sig_object> sigFile);
+  std::vector<splat_out> ProcessSignatureFile(std::vector<sig_object> const &sigFile);
 
-  auto TestSignatureSymbol(sig_symbol sig_sym, std::string object_name, uint32_t offset) -> bool;
+  auto TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t offset, sig_section const &sig_sec, sig_object const &sig_obj) -> std::vector<section_guess>;
 
   auto AddResult(search_result_t result) -> bool;
   static auto ResultCmp(search_result_t a, search_result_t b) -> bool;
@@ -90,4 +109,4 @@ class CN64Sym {
 };
 
 static void ReadStrippedWord(uint8_t* dst, const uint8_t* src, int relType);
-auto TestSymbol(sig_symbol sig_sym, const uint8_t* buffer) -> bool;
+auto TestSymbol(sig_symbol const &sig_sym, const uint8_t* buffer) -> bool;

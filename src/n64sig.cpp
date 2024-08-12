@@ -42,6 +42,8 @@ std::vector<sig_object> CN64Sig::ProcessLibrary(const char *path) {
 
   auto sig_library = std::vector<sig_object>();
 
+  std::unordered_map<uint32_t, int> symbol_crcs;
+
   Elf_Cmd elf_command = ELF_C_READ;
   Elf *object_file_elf = nullptr;
   while ((object_file_elf = elf_begin(archive_file_descriptor, elf_command, archive_elf)) != nullptr) {
@@ -300,6 +302,7 @@ std::vector<sig_object> CN64Sig::ProcessLibrary(const char *path) {
           sig_sym.crc_all = result.checksum();
         }
 
+        symbol_crcs[sig_sym.crc_all] += 1;
         sig_sec.symbols.push_back(sig_sym);
       }
 
@@ -311,6 +314,17 @@ std::vector<sig_object> CN64Sig::ProcessLibrary(const char *path) {
     elf_end(object_file_elf);
   }
   close(archive_file_descriptor);
+
+  //remove any symbols with matching CRCs
+  //impossible to use the CRC alone to determine which one it is in ROM
+  //FLIRT will not have this problem
+  for (auto &sig_obj : sig_library) {
+    for (auto &sig_section : sig_obj.sections) {
+      std::erase_if(sig_section.symbols, [&symbol_crcs](sig_symbol const &sig_sym) {
+        return symbol_crcs[sig_sym.crc_all] > 1;
+      });
+    }
+  }
 
   return sig_library;
 }

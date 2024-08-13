@@ -155,6 +155,7 @@ std::vector<sig_object> CN64Sig::ProcessLibrary(const char *path) {
         auto symbol_referencing_section_index = libelf_symbol.st_shndx;
         auto symbol_name = elf_strptr(object_file_elf, symtab_header.sh_link, libelf_symbol.st_name);
         auto symbol_type = GELF_ST_TYPE(libelf_symbol.st_info);
+        auto symbol_bind = GELF_ST_BIND(libelf_symbol.st_info);
         auto symbol_size = libelf_symbol.st_size;
         auto symbol_offset = libelf_symbol.st_value;
     
@@ -162,7 +163,11 @@ std::vector<sig_object> CN64Sig::ProcessLibrary(const char *path) {
         //the symbol for the section, shares its name
         //processing it is worse than useless currently, because relocation handling 0s out the addends
         //in the entire section
-        if (symbol_referencing_section_index != section_index || symbol_size == 0 || strcmp(symbol_name, section_name) == 0) {
+        //Should I label week symbols in the output?
+        //They basically just get processed for lookups
+        //all that is needed is the symbol's offset
+        //also is there any part of the code below that can misbehave with a weak symbol?
+        if (symbol_referencing_section_index != section_index || (symbol_type != STB_WEAK && symbol_size == 0) || strcmp(symbol_name, section_name) == 0) {
           continue;
         }
           

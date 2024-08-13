@@ -9,7 +9,7 @@ out
 *.a
 *.o
 
-log
+*log
 log*.sig
 log*.yaml
 testout*

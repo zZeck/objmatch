@@ -95,9 +95,17 @@ class CN64Sym {
 
   void DumpResults();
 
+  using sig_obj_sec_sym = struct {
+    std::string symbol_name;
+    std::string section_name;
+    std::string object_name;
+    uint64_t symbol_offset;
+    uint64_t section_size;
+  };
+
   std::vector<splat_out> ProcessSignatureFile(std::vector<sig_object> const &sigFile);
 
-  auto TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t offset, sig_section const &sig_sec, sig_object const &sig_obj) -> std::vector<section_guess>;
+  auto TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t offset, sig_section const &sig_sec, sig_object const &sig_obj, std::unordered_map<std::string, sig_obj_sec_sym> sym_map) -> std::vector<section_guess>;
 
   auto AddResult(search_result_t result) -> bool;
   static auto ResultCmp(search_result_t a, search_result_t b) -> bool;

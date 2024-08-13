@@ -235,6 +235,21 @@ void CN64Sym::DumpResults() {
 
 
 std::vector<splat_out> CN64Sym::ProcessSignatureFile(std::vector<sig_object> const &sigFile) {
+  std::unordered_map<std::string, sig_obj_sec_sym> sym_map;
+  for (auto const &sig_obj : sigFile) {
+    for (auto const &sig_section : sig_obj.sections) {
+      for (auto const &sig_sym : sig_section.symbols) {
+        //should not be any repeats because of ODR
+        sym_map[sig_sym.symbol] = sig_obj_sec_sym {
+          .symbol_name = sig_sym.symbol,
+          .section_name = sig_section.name,
+          .object_name = sig_obj.file,
+          .symbol_offset = sig_sym.offset,
+          .section_size = sig_section.size
+        };
+      }
+    }
+  }
 
   std::vector<section_guess> results;
   for (auto const &sig_obj : sigFile) {
@@ -242,10 +257,20 @@ std::vector<splat_out> CN64Sym::ProcessSignatureFile(std::vector<sig_object> con
     for (auto const &sig_section : sig_obj.sections) {
       if (sig_section.name != ".text") continue;
       for (auto const &sig_sym : sig_section.symbols) {
-        for (auto rom_offset : m_LikelyFunctionOffsets) {
+        //multiple functions with the same crc can't be distinguished
+        if(sig_sym.duplicate_crc) continue;
+        std::vector<uint32_t> candidates;
+        std::copy_if(m_LikelyFunctionOffsets.cbegin(), m_LikelyFunctionOffsets.cend(), std::back_inserter(candidates), [&sig_obj, &sig_section, &sig_sym, this](uint32_t rom_offset) {
+          auto temp = &m_Binary[rom_offset];
+          return TestSymbol(sig_sym, temp);
+        });
+        //crc could match random code in game rom
+        //if there are multiple matches, impossible to tell which is legit
+        if (candidates.size() > 1) continue;
+        for (auto rom_offset : candidates) {
           // should have a condition on the offset loop, so finding
           // result stops search? symbol could theoretically have been linked in more than once
-          auto guesses = TestSignatureSymbol(sig_sym, rom_offset, sig_section, sig_obj);
+          auto guesses = TestSignatureSymbol(sig_sym, rom_offset, sig_section, sig_obj, sym_map);
           results.insert(results.end(), guesses.begin(), guesses.end());
         }
       }
@@ -283,7 +308,7 @@ std::vector<splat_out> CN64Sym::ProcessSignatureFile(std::vector<sig_object> con
   return blah;
 }
 
-auto CN64Sym::TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t rom_offset, sig_section const &sig_sec, sig_object const &sig_obj) -> std::vector<section_guess> {
+auto CN64Sym::TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t rom_offset, sig_section const &sig_sec, sig_object const &sig_obj, std::unordered_map<std::string, sig_obj_sec_sym> sym_map) -> std::vector<section_guess> {
   typedef struct {
     uint32_t address;
     sig_relocation relocation;
@@ -293,83 +318,93 @@ auto CN64Sym::TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t rom_offset
 
   std::vector<section_guess> section_guesses;
 
-  if (TestSymbol(sig_sym, &m_Binary[rom_offset])) {
-    //AddResult(search_result_t{.address = m_HeaderSize + offset, .size = sig_sym.size, .name = sig_sym.symbol});
+  // add results from relocations
+  for (auto rel : sig_sym.relocations) {
+    auto temp = &m_Binary[rom_offset + rel.offset];
+    auto temp1 = *reinterpret_cast<uint32_t*>(temp);
 
-    // add results from relocations
-    for (auto rel : sig_sym.relocations) {
-      auto temp = &m_Binary[rom_offset + rel.offset];
-      auto temp1 = *reinterpret_cast<uint32_t*>(temp);
+    uint32_t const opcode = bswap32(temp1);
 
-      uint32_t const opcode = bswap32(temp1);
+    auto relocation_name = rel.name;
 
-      auto relocation_name = rel.name;
-
-      if (rel.local) {
-        const std::filesystem::path fs_path{sig_obj.file};
-        char relocName[128];
-        snprintf(relocName, sizeof(relocName), "%s_%s_%04X", fs_path.stem().c_str(), &rel.name.c_str()[1], rel.addend);
-        relocation_name = std::string(relocName);
-        relocMap[relocation_name].local = true;
-      }
-
-      switch (rel.type) {
-        case R_MIPS_HI16:
-          //if (!relocMap.contains(relocation_name)) {
-          //  relocMap[relocation_name].haveHi16 = true;
-          //  relocMap[relocation_name].haveLo16 = false;
-          //}
-          relocMap[relocation_name].address = (opcode & 0x0000FFFF) << 16;
-          break;
-        case R_MIPS_LO16:
-          //if (relocMap.contains(relocation_name)) {
-            relocMap[relocation_name].address += static_cast<int16_t>(opcode & 0x0000FFFF);
-          //} else {
-          //  printf("missing hi16?");
-          //  exit(0);
-          //}
-          break;
-        case R_MIPS_26:
-          relocMap[relocation_name].address = (m_HeaderSize & 0xF0000000) + ((opcode & 0x03FFFFFF) << 2);
-          break;
-      }
-      relocMap[relocation_name].relocation = rel;
+    if (rel.local) {
+      const std::filesystem::path fs_path{sig_obj.file};
+      char relocName[128];
+      snprintf(relocName, sizeof(relocName), "%s_%s_%04X", fs_path.stem().c_str(), &rel.name.c_str()[1], rel.addend);
+      relocation_name = std::string(relocName);
+      relocMap[relocation_name].local = true;
     }
 
-    for (auto& i : relocMap) {
-      if(i.second.local) {
-        auto rel_target_section_name = i.second.relocation.name;
-        auto rel_target_section = std::find_if(sig_obj.sections.begin(), sig_obj.sections.end(), [rel_target_section_name](sig_section some_sec_from_obj) {
-          return some_sec_from_obj.name == rel_target_section_name;
-        });
-        auto relocation_target_section = i.second.relocation.name;
-        section_guesses.push_back(section_guess {
-          .rom_offset = rom_offset, //name better, rom_offset_searched
-          .symbol_offset = sig_sym.offset, //name better, symbol_searched_offset
-          .section_offset = i.second.address - i.second.relocation.addend - m_HeaderSize, //need to do calculation based on address
-          .section_vram = i.second.address - i.second.relocation.addend, //address from ROM code, minus the addend from reloc, to get to start of local section
-          .symbol_name = sig_sym.symbol, //name better, symbol_name searched
-          .section_size = rel_target_section->size,
-          .rel = rel_info::local_rel,
-          .section_name = i.second.relocation.name, //name is the correct section for LOCAL
-          .object_name = sig_obj.file //object is correct for LOCAL
-        });
-      }
-      //AddResult(search_result_t{.address = i.second.address, .size = 0, .name = i.first});
+    switch (rel.type) {
+      case R_MIPS_HI16:
+        //if (!relocMap.contains(relocation_name)) {
+        //  relocMap[relocation_name].haveHi16 = true;
+        //  relocMap[relocation_name].haveLo16 = false;
+        //}
+        relocMap[relocation_name].address = (opcode & 0x0000FFFF) << 16;
+        break;
+      case R_MIPS_LO16:
+        //if (relocMap.contains(relocation_name)) {
+          relocMap[relocation_name].address += static_cast<int16_t>(opcode & 0x0000FFFF);
+        //} else {
+        //  printf("missing hi16?");
+        //  exit(0);
+        //}
+        break;
+      case R_MIPS_26:
+        relocMap[relocation_name].address = (m_HeaderSize & 0xF0000000) + ((opcode & 0x03FFFFFF) << 2);
+        break;
     }
-
-    section_guesses.push_back(section_guess {
-      .rom_offset = rom_offset,
-      .symbol_offset = sig_sym.offset,
-      .section_offset =  rom_offset - sig_sym.offset,
-      .section_vram = m_HeaderSize + rom_offset - sig_sym.offset,
-      .symbol_name = sig_sym.symbol,
-      .section_size = sig_sec.size,
-      .rel = rel_info::not_rel,
-      .section_name = sig_sec.name,
-      .object_name = sig_obj.file
-    });
+    relocMap[relocation_name].relocation = rel;
   }
+
+  for (auto& i : relocMap) {
+    if(i.second.local) {
+      auto rel_target_section_name = i.second.relocation.name;
+      auto rel_target_section = std::find_if(sig_obj.sections.begin(), sig_obj.sections.end(), [rel_target_section_name](sig_section some_sec_from_obj) {
+        return some_sec_from_obj.name == rel_target_section_name;
+      });
+      auto relocation_target_section = i.second.relocation.name;
+      section_guesses.push_back(section_guess {
+        .rom_offset = rom_offset, //name better, rom_offset_searched
+        .symbol_offset = sig_sym.offset, //name better, symbol_searched_offset
+        .section_offset = i.second.address - i.second.relocation.addend - m_HeaderSize, //need to do calculation based on address
+        .section_vram = i.second.address - i.second.relocation.addend, //address from ROM code, minus the addend from reloc, to get to start of local section
+        .symbol_name = sig_sym.symbol, //name better, symbol_name searched
+        .section_size = rel_target_section->size,
+        .rel = rel_info::local_rel,
+        .section_name = i.second.relocation.name, //name is the correct section for LOCAL
+        .object_name = sig_obj.file //object is correct for LOCAL
+      });
+    } else {
+      //what if not found?
+      auto rel_symbol = sym_map[i.second.relocation.name];
+      
+      section_guesses.push_back(section_guess {
+        .rom_offset = rom_offset,
+        .symbol_offset = rel_symbol.symbol_offset,
+        .section_offset = i.second.address - i.second.relocation.addend - rel_symbol.symbol_offset - m_HeaderSize,
+        .section_vram = i.second.address - i.second.relocation.addend - rel_symbol.symbol_offset,
+        .symbol_name = rel_symbol.symbol_name,
+        .section_size = rel_symbol.section_size,
+        .rel = rel_info::global_rel,
+        .section_name = rel_symbol.section_name,
+        .object_name = rel_symbol.object_name
+      });
+    }
+  }
+
+  section_guesses.push_back(section_guess {
+    .rom_offset = rom_offset,
+    .symbol_offset = sig_sym.offset,
+    .section_offset =  rom_offset - sig_sym.offset,
+    .section_vram = m_HeaderSize + rom_offset - sig_sym.offset,
+    .symbol_name = sig_sym.symbol,
+    .section_size = sig_sec.size,
+    .rel = rel_info::not_rel,
+    .section_name = sig_sec.name,
+    .object_name = sig_obj.file
+  });
 
   return section_guesses;
 }

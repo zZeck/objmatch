@@ -19,6 +19,7 @@ using sig_symbol = struct {
   uint64_t size;
   uint32_t crc_8;
   uint32_t crc_all;
+  bool duplicate_crc;
   std::string symbol;
   std::vector<sig_relocation> relocations;
 };
@@ -64,6 +65,7 @@ struct convert<sig_symbol> {
     node["size"] = sig_symbol.size;
     node["crc_8"] = sig_symbol.crc_8;
     node["crc_all"] = sig_symbol.crc_all;
+    node["duplicate_crc"] = sig_symbol.duplicate_crc;
     node["symbol"] = sig_symbol.symbol;
     node["relocations"] = sig_symbol.relocations;
     return node;
@@ -73,6 +75,7 @@ struct convert<sig_symbol> {
     sig_symbol.size = node["size"].as<uint64_t>();
     sig_symbol.crc_8 = node["crc_8"].as<uint32_t>();
     sig_symbol.crc_all = node["crc_all"].as<uint32_t>();
+    sig_symbol.duplicate_crc = node["duplicate_crc"].as<bool>();
     sig_symbol.symbol = node["symbol"].as<std::string>();
     sig_symbol.relocations = node["relocations"].as<std::vector<sig_relocation>>();
     return true;

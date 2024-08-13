@@ -318,11 +318,12 @@ std::vector<sig_object> CN64Sig::ProcessLibrary(const char *path) {
   //remove any symbols with matching CRCs
   //impossible to use the CRC alone to determine which one it is in ROM
   //FLIRT will not have this problem
+  //still need them to use for lookups
   for (auto &sig_obj : sig_library) {
     for (auto &sig_section : sig_obj.sections) {
-      std::erase_if(sig_section.symbols, [&symbol_crcs](sig_symbol const &sig_sym) {
-        return symbol_crcs[sig_sym.crc_all] > 1;
-      });
+      for(auto &sig_sym : sig_section.symbols) {
+        sig_sym.duplicate_crc = symbol_crcs[sig_sym.crc_all] > 1;
+      }
     }
   }
 

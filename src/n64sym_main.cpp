@@ -10,7 +10,7 @@ auto main(int argc, const char* argv[]) -> int {
 
   if (argc < 2) {
     printf(
-        "n64sym - N64 symbol identification tool (https://github.com/shygoo/n64sym)\n\n"
+        "n64sym - N64 symbol identification tool ()\n\n"
         "  Usage: n64sym <binary path> [options]\n\n"
         "  Options:\n"
         "    -s                         scan for symbols from built-in signature file\n"
@@ -48,26 +48,6 @@ auto main(int argc, const char* argv[]) -> int {
           printf("Error: No path specified for '-l'\n");
         }
         n64sym.AddLibPath(argv[argi + 1]);
-        argi++;
-        break;
-      case 's':
-        n64sym.UseBuiltinSignatures(true);
-        break;
-      case 't':
-        n64sym.SetThoroughScan(true);
-        break;
-      case 'v':
-        n64sym.SetVerbose(true);
-        break;
-      case 'f':
-        if (argi + 1 >= argc) {
-          printf("Error: No output format specified for '-f'\n");
-          return EXIT_FAILURE;
-        }
-        if (!n64sym.SetOutputFormat(argv[argi + 1])) {
-          printf("Error: Invalid output format '%s'\n", argv[argi + 1]);
-          return EXIT_FAILURE;
-        }
         argi++;
         break;
       case 'h':

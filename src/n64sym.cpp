@@ -106,24 +106,6 @@ auto CN64Sym::LoadBinary(const char* binPath) -> bool {
 
 void CN64Sym::AddLibPath(const char* libPath) { m_LibPaths.push_back(libPath); }
 
-void CN64Sym::SetVerbose(bool bVerbose) { m_bVerbose = bVerbose; }
-
-void CN64Sym::UseBuiltinSignatures(bool bUseBuiltinSignatures) { m_bUseBuiltinSignatures = bUseBuiltinSignatures; }
-
-void CN64Sym::SetThoroughScan(bool bThoroughScan) { m_bThoroughScan = bThoroughScan; }
-
-auto CN64Sym::SetOutputFormat(const char* fmtName) -> bool {
-  for (auto& FormatName : FormatNames) {
-    if (strcmp(FormatName.name, fmtName) == 0) {
-      m_OutputFormat = FormatName.fmt;
-      return true;
-    }
-  }
-
-  m_OutputFormat = N64SYM_FMT_DEFAULT;
-  return false;
-}
-
 auto CN64Sym::SetOutputPath(const char* path) -> bool {
   m_OutputFile.open(path, std::ofstream::binary);
 
@@ -166,10 +148,6 @@ auto CN64Sym::Run() -> bool {
     // todo JALs?
   }
 
-  // if (m_bUseBuiltinSignatures) {
-  //   ProcessSignatureFile(m_BuiltinSigs);
-  // }
-
   for (auto& m_LibPath : m_LibPaths) {
     const std::filesystem::path fs_path{m_LibPath};
     if (fs_path.extension() == ".sig") {
@@ -186,53 +164,10 @@ auto CN64Sym::Run() -> bool {
     }
   }
 
-  //SortResults();
-  //DumpResults();
+
 
   return true;
 }
-
-void CN64Sym::DumpResults() {
-  switch (m_OutputFormat) {
-    case N64SYM_FMT_PJ64:
-      for (auto& result : m_Results) {
-        Output("%08X,code,%s\n", result.address, result.name.c_str());
-      }
-      break;
-    case N64SYM_FMT_NEMU:
-      Output("Root\n");
-      Output("\tCPU\n");
-      for (auto& result : m_Results) {
-        Output("\t\tCPU 0x%08X: %s\n", result.address, result.name.c_str());
-      }
-      Output("\tMemory\n");
-      Output("\tRSP\n");
-      break;
-    case N64SYM_FMT_ARMIPS:
-      for (auto& result : m_Results) {
-        Output(".definelabel %s, 0x%08X\n", result.name.c_str(), result.address);
-      }
-      break;
-    case N64SYM_FMT_N64SPLIT:
-      Output("labels:\n");
-      for (auto& result : m_Results) {
-        Output("   - [0x%08X, \"%s\"]\n", result.address, result.name.c_str());
-      }
-      break;
-    case N64SYM_FMT_SPLAT:
-      for (auto& result : m_Results) {
-        Output("%s = 0x%08X;\n", result.name.c_str(), result.address);
-      }
-      break;
-    case N64SYM_FMT_DEFAULT:
-    default:
-      for (auto& result : m_Results) {
-        Output("%08X %s\n", result.address, result.name.c_str());
-      }
-      break;
-  }
-}
-
 
 std::vector<splat_out> CN64Sym::ProcessSignatureFile(std::vector<sig_object> const &sigFile) {
   std::unordered_map<std::string, sig_obj_sec_sym> sym_map;
@@ -358,6 +293,8 @@ auto CN64Sym::TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t rom_offset
     relocMap[relocation_name].relocation = rel;
   }
 
+  //Should I validate the .text ones by checking the sig_sym checksum
+  //for the location?
   for (auto& i : relocMap) {
     if(i.second.local) {
       auto rel_target_section_name = i.second.relocation.name;
@@ -407,59 +344,6 @@ auto CN64Sym::TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t rom_offset
   });
 
   return section_guesses;
-}
-
-auto CN64Sym::AddResult(search_result_t result) -> bool {
-  // todo use map
-  if (result.address == 0) {
-    return false;
-  }
-
-  for (auto& otherResult : m_Results) {
-    if (otherResult.address == result.address) {
-      return false;  // already have
-    }
-  }
-
-  m_Results.push_back(result);
-  return true;
-}
-
-auto CN64Sym::ResultCmp(search_result_t a, search_result_t b) -> bool { return (a.address < b.address); }
-
-void CN64Sym::SortResults() { std::sort(m_Results.begin(), m_Results.end(), ResultCmp); }
-
-void CN64Sym::ClearLine(int nChars) {
-  printf("\r");
-  printf("%*s", nChars, "");
-  printf("\r");
-}
-
-void CN64Sym::Log(const char* format, ...) const {
-  if (!m_bVerbose) {
-    return;
-  }
-
-  va_list args;
-  va_start(args, format);
-  vprintf(format, args);
-  va_end(args);
-}
-
-void CN64Sym::Output(const char* format, ...) {
-  va_list args;
-  va_start(args, format);
-
-  size_t const len = vsnprintf(nullptr, 0, format, args);
-  char* str = new char[len + 1];
-  va_end(args);
-
-  va_start(args, format);
-  vsprintf(str, format, args);
-  va_end(args);
-
-  *m_Output << str;
-  delete[] str;
 }
 
 void ReadStrippedWord(uint8_t* dst, const uint8_t* src, int relType) {

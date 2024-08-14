@@ -13,6 +13,7 @@
 #include <set>
 #include <filesystem>
 #include <numeric>
+#include <format>
 
 #include "splat_out.h"
 
@@ -188,7 +189,7 @@ std::vector<splat_out> CN64Sym::ProcessSignatureFile(std::vector<sig_object> con
 
   std::vector<section_guess> results;
   for (auto const &sig_obj : sigFile) {
-    //if(sig_obj.file != "drvrNew.o") continue;
+    //if(sig_obj.file != "env.o") continue;
     for (auto const &sig_section : sig_obj.sections) {
       if (sig_section.name != ".text") continue;
       for (auto const &sig_sym : sig_section.symbols) {
@@ -200,14 +201,14 @@ std::vector<splat_out> CN64Sym::ProcessSignatureFile(std::vector<sig_object> con
           return TestSymbol(sig_sym, temp);
         });
         //crc could match random code in game rom
-        //if there are multiple matches, impossible to tell which is legit
-        if (candidates.size() > 1) continue;
-        for (auto rom_offset : candidates) {
-          // should have a condition on the offset loop, so finding
-          // result stops search? symbol could theoretically have been linked in more than once
-          auto guesses = TestSignatureSymbol(sig_sym, rom_offset, sig_section, sig_obj, sym_map);
-          results.insert(results.end(), guesses.begin(), guesses.end());
-        }
+        //if there are multiple matches, impossible to tell which is legit.
+        //If no results, also done.
+        if (candidates.size() != 1) continue;
+        auto rom_offset = candidates[0];
+        // should have a condition on the offset loop, so finding
+        // result stops search? symbol could theoretically have been linked in more than once
+        auto guesses = TestSignatureSymbol(sig_sym, rom_offset, sig_section, sig_obj, sym_map);
+        results.insert(results.end(), guesses.begin(), guesses.end());
       }
     }
   }
@@ -231,15 +232,53 @@ std::vector<splat_out> CN64Sym::ProcessSignatureFile(std::vector<sig_object> con
 
   results.erase(last, results.end());
 
-  auto blah = std::vector<splat_out>(results.size());
-  std::transform(results.begin(), results.end(), blah.begin(), [](section_guess const &section_guess) {
-    return splat_out {
-      .start = section_guess.section_offset,
-      .vram = section_guess.section_vram,
-      .type = section_guess.section_name,
-      .name = section_guess.object_name
-    };
+  std::sort(results.begin(), results.end(), [](section_guess const &a, section_guess const &b)
+  {
+    return a.section_offset < b.section_offset;
   });
+
+  std::vector<splat_out> blah;
+  //can crash if vector is empty it seems?
+  for (auto section_guess = results.begin(); section_guess < results.end()-1; ++section_guess) {
+    auto off_comp = section_guess[0].section_offset + section_guess[0].section_size <=> section_guess[1].section_offset;
+    if (off_comp == 0) {
+      blah.push_back(splat_out {
+        .start = section_guess[0].section_offset,
+        .vram = section_guess[0].section_vram,
+        .type = section_guess[0].section_name,
+        .name = section_guess[0].object_name
+      });
+      //careful, potential issue if NEXT section is omitted due to overlap
+      //the endpoint of THIS section is lost
+    }
+    if (off_comp < 0) {
+      blah.push_back(splat_out {
+        .start = section_guess[0].section_offset,
+        .vram = section_guess[0].section_vram,
+        .type = section_guess[0].section_name,
+        .name = section_guess[0].object_name
+      });
+      blah.push_back(splat_out {
+        .start = section_guess[0].section_offset + section_guess[0].section_size,
+        .vram = section_guess[0].section_vram + section_guess[0].section_size,
+        .type = "bin",
+        .name = std::format("0x{:x}", section_guess[0].section_offset + section_guess[0].section_size)
+      });
+    }
+    if (off_comp > 0) {
+      // error, sections would overlap.
+      // print bin section to mark prior section's end
+      blah.push_back(splat_out {
+        .start = section_guess[0].section_offset,
+        .vram = section_guess[0].section_vram,
+        .type = "bin",
+        .name = std::format("0x{:x}", section_guess[0].section_offset)
+      });
+    }
+  }
+
+
+
   return blah;
 }
 
@@ -314,20 +353,22 @@ auto CN64Sym::TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t rom_offset
         .object_name = sig_obj.file //object is correct for LOCAL
       });
     } else {
-      //what if not found?
-      auto rel_symbol = sym_map[i.second.relocation.name];
-      
-      section_guesses.push_back(section_guess {
-        .rom_offset = rom_offset,
-        .symbol_offset = rel_symbol.symbol_offset,
-        .section_offset = i.second.address - i.second.relocation.addend - rel_symbol.symbol_offset - m_HeaderSize,
-        .section_vram = i.second.address - i.second.relocation.addend - rel_symbol.symbol_offset,
-        .symbol_name = rel_symbol.symbol_name,
-        .section_size = rel_symbol.section_size,
-        .rel = rel_info::global_rel,
-        .section_name = rel_symbol.section_name,
-        .object_name = rel_symbol.object_name
-      });
+      if (auto rel_symbol = sym_map.find(i.second.relocation.name); rel_symbol != sym_map.end()) {
+        section_guesses.push_back(section_guess {
+          .rom_offset = rom_offset,
+          .symbol_offset = rel_symbol->second.symbol_offset,
+          .section_offset = i.second.address - i.second.relocation.addend - rel_symbol->second.symbol_offset - m_HeaderSize,
+          .section_vram = i.second.address - i.second.relocation.addend - rel_symbol->second.symbol_offset,
+          .symbol_name = rel_symbol->second.symbol_name,
+          .section_size = rel_symbol->second.section_size,
+          .rel = rel_info::global_rel,
+          .section_name = rel_symbol->second.section_name,
+          .object_name = rel_symbol->second.object_name
+        });
+      } else {
+        //symbol not found, not really an error, as it could be extern
+        //and intended to be defined by library consumer
+      }
     }
   }
 

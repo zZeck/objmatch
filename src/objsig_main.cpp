@@ -1,22 +1,22 @@
+#include <string.h>
+
 #include <cstdio>
 #include <cstdlib>
 
-#include "n64sig.h"
-#include <string.h>
+#include "objsig.h"
 
 auto main(int argc, const char *argv[]) -> int {
   if (argc < 2) {
     printf(
-        "n64sig - signature file generator for n64sym ()\n\n"
-        "  Usage: n64sig [options]\n\n"
+        "objsig - signature file generator for objsym ()\n\n"
+        "  Usage: objsig [options]\n\n"
         "  Options:\n"
-        "    -l <lib/obj path>     add a library/object path\n"
-        "    -f <format>           set the output format (json, default)\n");
+        "    -l <lib path>     add a library path\n");
 
     return EXIT_FAILURE;
   }
 
-  CN64Sig n64sig;
+  ObjSig objsig;
 
   for (int argi = 1; argi < argc; argi++) {
     // printf("[%s]\n", argv[argi]);
@@ -36,24 +36,13 @@ auto main(int argc, const char *argv[]) -> int {
         if (argi + 1 >= argc) {
           printf("Error: No path specified for '-l'\n");
         }
-        n64sig.AddLibPath(argv[argi + 1]);
-        argi++;
-        break;
-      case 'f':
-        if (argi + 1 >= argc) {
-          printf("Error: No output format specified for '-f'\n");
-          return EXIT_FAILURE;
-        }
-        if (!n64sig.SetOutputFormat(argv[argi + 1])) {
-          printf("Error: Invalid output format '%s'\n", argv[argi + 1]);
-          return EXIT_FAILURE;
-        }
+        objsig.AddLibPath(argv[argi + 1]);
         argi++;
         break;
     }
   }
 
-  n64sig.Run();
+  objsig.Run();
 
   return EXIT_SUCCESS;
 }

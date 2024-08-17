@@ -2,7 +2,9 @@
 
 #include <vector>
 #include <string>
+#include <format>
 #include <yaml-cpp/yaml.h>
+
 
 using splat_out = struct {
   uint64_t start;
@@ -16,8 +18,8 @@ template <>
 struct convert<splat_out> {
   static Node encode(const splat_out &splat_out) {
     Node node;
-    node["start"] = splat_out.start;
-    node["vram"] = splat_out.vram;
+    node["start"] = std::format("0x{:x}", splat_out.start);
+    node["vram"] = std::format("0x{:x}", splat_out.vram);
     node["type"] = splat_out.type;
     node["name"] = splat_out.name;
     return node;

@@ -1,32 +1,28 @@
+#include <string.h>
+
 #include <cstdio>
 #include <cstdlib>
 
-#include "n64sym.h"
-#include <string.h>
+#include "objmatch.h"
 
 auto main(int argc, const char* argv[]) -> int {
-  CN64Sym n64sym;
+  ObjMatch objmatch;
   const char* binPath = nullptr;
 
   if (argc < 2) {
     printf(
-        "n64sym - N64 symbol identification tool ()\n\n"
-        "  Usage: n64sym <binary path> [options]\n\n"
+        "objmatch - Library object file section finder ()\n\n"
+        "  Usage: objmatch <binary path> [options]\n\n"
         "  Options:\n"
-        "    -s                         scan for symbols from built-in signature file\n"
-        "    -l <sig/lib/obj path>      scan for symbols from signature/library/object file(s)\n"
-        "    -f <format>                set the output format (pj64, nemu, armips, n64split, splat, default)\n"
-        "    -o <output path>           set the output path\n"
-        "    -h <headersize>            set the headersize (default: 0x80000000)\n"
-        "    -t                         scan thoroughly\n"
-        "    -v                         enable verbose logging\n");
+        "    -l <sig path>      scan for symbols from signature file(s)\n"
+        "    -h <headersize>            set the headersize (default: 0x80000000)\n");
 
     return EXIT_FAILURE;
   }
 
   binPath = argv[1];
 
-  if (!n64sym.LoadBinary(binPath)) {
+  if (!objmatch.LoadBinary(binPath)) {
     printf("Error: Failed to load '%s'\n", binPath);
     return EXIT_FAILURE;
   }
@@ -47,7 +43,7 @@ auto main(int argc, const char* argv[]) -> int {
         if (argi + 1 >= argc) {
           printf("Error: No path specified for '-l'\n");
         }
-        n64sym.AddLibPath(argv[argi + 1]);
+        objmatch.AddLibPath(argv[argi + 1]);
         argi++;
         break;
       case 'h':
@@ -55,27 +51,27 @@ auto main(int argc, const char* argv[]) -> int {
           printf("Error: No header size specified for '-h'\n");
           return EXIT_FAILURE;
         }
-        n64sym.SetHeaderSize(strtoul(argv[argi + 1], nullptr, 0));
+        objmatch.SetHeaderSize(strtoul(argv[argi + 1], nullptr, 0));
         argi++;
         break;
-      case 'o':
+      /*case 'o':
         if (argi + 1 >= argc) {
           printf("Error: No path specified for '-o'\n");
           return EXIT_FAILURE;
         }
-        if (!n64sym.SetOutputPath(argv[argi + 1])) {
+        if (!objmatch.SetOutputPath(argv[argi + 1])) {
           printf("Error: Could not open '%s'\n", argv[argi + 1]);
           return EXIT_FAILURE;
         }
         argi++;
-        break;
+        break;*/
       default:
         printf("Error: Invalid switch '%s'\n", argv[argi]);
         return EXIT_FAILURE;
     }
   }
 
-  if (!n64sym.Run()) {
+  if (!objmatch.Run()) {
     return EXIT_FAILURE;
   }
 

@@ -1,98 +1,30 @@
-# n64sym
+Find sections from libraries within a binary, and output the information in Splat's yaml format.
 
-`n64sym` is a command-line utility that identifies symbols in N64 games.
+Feedback, bug reports, and suggestions welcomed.
 
-## Usage
+Build with CMake.
+Requires C++20.
 
-    n64sym <input path> [options] 
+Dependencies:
+boost/crc.hpp (to be replaced with FLIRT system from Rizin)
+yaml-cpp/yaml.h
+libelf
 
-#### `<input path>`
+Create object signature file using objsig with a library archive.
+out/build/Clang\ 17.0.6\ x86_64-pc-linux-gnu/objsig -l libultra_rom.a > 2.0I_libultra_rom.sig
 
-Sets the path of the file to scan. The input file may either be a RAM dump or ROM image.
+Search a rom for the object file sections from the library, using the signatures.
+out/build/Clang\ 17.0.6\ x86_64-pc-linux-gnu/objmatch ../baserom.z64 -l 2.0I_libultra_rom.sig > splat.yaml
 
-If the file extension is `.z64`, `.n64`, or `.v64`, the tool will assume the file is a ROM image and attempt to identify the position of the main code segment and adjust the symbol addresses accordingly. Note that scanning a ROM image may yield inaccurate results; using a RAM dump for the input file is recommended.
+Output example:
 
-## Options
-
-    -s                        scan for symbols from the built-in signature file
-    -l <sig/lib/obj path(s)>  scan for symbols from signature/object/library file(s)
-    -f <output format>        set the output format (pj64, nemu, armips, n64split, splat, default)
-    -o <output path>          set the output path
-    -h <headersize>           set the header size  (default: 0x80000000)
-    -t                        scan thoroughly
-    -v                        enable verbose logging
-
-#### `-s`
-
-Scans against the built-in signature file. See [Included Libraries](included-libs.md) for a list of currently included libraries.
-
-#### `-l <sig/lib/obj path(s)>`
-
-Scans against signature files and ELF libraries/objects. If a directory path is provided, `n64sym` will use all `*.sig`, `*.a` and `*.o` files that it finds in the directory tree. This option may be used multiple times.
-
-#### `-f <format>`
-
-Sets the output format. Valid formats include `pj64`, `nemu`, `armips`, `n64split`, `splat`, and `default`.
-
-| Format     | Description                             |
-|------------|-----------------------------------------|
-| `pj64`     | Project64 debugger symbols (*.sym)      |
-| `nemu`     | Nemu64 bookmarks (*.nbm)                |
-| `armips`   | armips labels (*.asm)                   |
-| `n64split` | n64split config labels (*.yaml)         |
-| `splat`    | splat symbol names (symbol_addrs.txt)   |
-| `default`  | Space-separated address and symbol name |
-
-#### `-o <output path>`
-
-Sets the output path. If this option is not used, `n64sym` will use the standard output.
-
-#### `-h <headersize>`
-
-Overrides the header size (displacement of memory address against absolute file address). By default this value is either `0x80000000` or the entry point if the input file is a ROM image.
-
-#### `-t`
-
-Enables thorough scanning. When this option is enabled, the scanner will check every byte of the input file instead of only checking spots that look like functions.
-
-#### `-v`
-
-Enables verbose output.
-
-## Examples
-```
-n64sym paper_mario_ram.bin -s -f "pj64" -o "C:/Project64/Save/PAPER MARIO.sym"
-```
-
-```
-n64sym "Super Mario 64 (U).z64" -s -f "n64split" -o "sm64config.yaml"
-```
-
-```
-n64sym "Ronaldinho Soccer 64.z64" -l "./libultra" | grep "osPiStartDma"
-```
----
-
-# n64sig
-
-`n64sig` is a command-line utility that generates `n64sym`-compatible signature files.
-
-## Usage
-
-    n64sig [options] > output_path
-
-## Options
-
-    -l <lib/obj path(s)>  generate signatures from object/library file(s)
-    -f <format>           set the output format (json, default)
----
-
-# Building
-
-## Utilities
-
-Run `make` to build `n64sym` and `n64sig`.
- 
-## Built-in signatures
-
-Create a directory in the project root named `oslibs` and drop the desired library/object files in it. Then run `make rebuild_sigs` to rebuild `src/builtin_signatures.sig` and `web/signatures.json`.
+- {start: 0x249d4, vram: 0x8005e754, type: .text, name: sched.o}
+- {start: 0x25314, vram: 0x8005f094, type: bin, name: 0x25314}
+- {start: 0x52cf4, vram: 0x8008ca74, type: .text, name: env.o}
+- {start: 0x53954, vram: 0x8008d6d4, type: bin, name: 0x53954}
+- {start: 0x5509c, vram: 0x8008ee1c, type: .text, name: synthesizer.o}
+- {start: 0x5577c, vram: 0x8008f4fc, type: bin, name: 0x5577c}
+- {start: 0x79300, vram: 0x800b3080, type: .text, name: createmesgqueue.o}
+- {start: 0x79330, vram: 0x800b30b0, type: .text, name: seteventmesg.o}
+- {start: 0x793a0, vram: 0x800b3120, type: .text, name: controller.o}
+- {start: 0x796e0, vram: 0x800b3460, type: bin, name: 0x796e0}

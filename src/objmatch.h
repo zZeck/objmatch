@@ -3,18 +3,16 @@
 #include <cstdarg>
 #include <cstdlib>
 #include <fstream>
+#include <iostream>
 #include <set>
 #include <vector>
-#include <iostream>
 
 #include "signature.h"
 #include "splat_out.h"
 
-using n64sym_output_fmt_t = enum { N64SYM_FMT_DEFAULT, N64SYM_FMT_PJ64, N64SYM_FMT_NEMU, N64SYM_FMT_ARMIPS, N64SYM_FMT_N64SPLIT, N64SYM_FMT_SPLAT };
-
-class CN64Sym {
+class ObjMatch {
  public:
-  ~CN64Sym();
+  ~ObjMatch();
   auto LoadBinary(const char* binPath) -> bool;
   void AddLibPath(const char* libPath);
   void SetHeaderSize(uint32_t headerSize);
@@ -22,11 +20,7 @@ class CN64Sym {
   auto Run() -> bool;
 
  private:
-  enum rel_info {
-    not_rel,
-    local_rel,
-    global_rel
-  };
+  enum rel_info { not_rel, local_rel, global_rel };
 
   using section_guess = struct {
     uint64_t rom_offset;
@@ -46,7 +40,7 @@ class CN64Sym {
 
   bool m_bOverrideHeaderSize{false};
 
-  std::ostream *m_Output = &std::cout;
+  std::ostream* m_Output = &std::cout;
   std::ofstream m_OutputFile;
 
   std::vector<const char*> m_LibPaths;
@@ -60,10 +54,11 @@ class CN64Sym {
     uint64_t section_size;
   };
 
-  std::vector<splat_out> ProcessSignatureFile(std::vector<sig_object> const &sigFile);
+  std::vector<splat_out> ProcessSignatureFile(std::vector<sig_object> const& sigFile);
 
-  auto TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t offset, sig_section const &sig_sec, sig_object const &sig_obj, std::unordered_map<std::string, sig_obj_sec_sym> sym_map) -> std::vector<section_guess>;
+  auto TestSignatureSymbol(sig_symbol const& sig_sym, uint32_t offset, sig_section const& sig_sec, sig_object const& sig_obj,
+                           std::unordered_map<std::string, sig_obj_sec_sym> sym_map) -> std::vector<section_guess>;
 };
 
 static void ReadStrippedWord(uint8_t* dst, const uint8_t* src, int relType);
-auto TestSymbol(sig_symbol const &sig_sym, const uint8_t* buffer) -> bool;
+auto TestSymbol(sig_symbol const& sig_sym, const uint8_t* buffer) -> bool;

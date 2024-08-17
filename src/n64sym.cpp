@@ -165,8 +165,6 @@ auto CN64Sym::Run() -> bool {
     }
   }
 
-
-
   return true;
 }
 
@@ -189,7 +187,6 @@ std::vector<splat_out> CN64Sym::ProcessSignatureFile(std::vector<sig_object> con
 
   std::vector<section_guess> results;
   for (auto const &sig_obj : sigFile) {
-    //if(sig_obj.file != "env.o") continue;
     for (auto const &sig_section : sig_obj.sections) {
       if (sig_section.name != ".text") continue;
       for (auto const &sig_sym : sig_section.symbols) {
@@ -277,6 +274,20 @@ std::vector<splat_out> CN64Sym::ProcessSignatureFile(std::vector<sig_object> con
     }
   }
 
+  auto final = results.back();
+
+  blah.push_back(splat_out {
+    .start = final.section_offset,
+    .vram = final.section_vram,
+    .type = final.section_name,
+    .name = final.object_name
+  });
+  blah.push_back(splat_out {
+    .start = final.section_offset + final.section_size,
+    .vram = final.section_vram + final.section_size,
+    .type = "bin",
+    .name = std::format("0x{:x}", final.section_offset + final.section_size)
+  });
 
 
   return blah;
@@ -287,6 +298,8 @@ auto CN64Sym::TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t rom_offset
     uint32_t address;
     sig_relocation relocation;
     bool local;
+    bool hi16_set;
+    bool lo16_set;
   } test_t;
   std::map<std::string, test_t> relocMap;
 
@@ -311,25 +324,26 @@ auto CN64Sym::TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t rom_offset
 
     switch (rel.type) {
       case R_MIPS_HI16:
-        //if (!relocMap.contains(relocation_name)) {
-        //  relocMap[relocation_name].haveHi16 = true;
-        //  relocMap[relocation_name].haveLo16 = false;
-        //}
-        relocMap[relocation_name].address = (opcode & 0x0000FFFF) << 16;
+        if (!relocMap[relocation_name].hi16_set) {
+          relocMap[relocation_name].address = (opcode & 0x0000FFFF) << 16;
+          relocMap[relocation_name].hi16_set = true;
+          relocMap[relocation_name].relocation = rel;
+        }
         break;
       case R_MIPS_LO16:
-        //if (relocMap.contains(relocation_name)) {
-          relocMap[relocation_name].address += static_cast<int16_t>(opcode & 0x0000FFFF);
-        //} else {
-        //  printf("missing hi16?");
-        //  exit(0);
-        //}
+        //this is to prevent multiple references to the same symbol
+        //from all adding their lo16 to the address
+          if (!relocMap[relocation_name].lo16_set) {
+            relocMap[relocation_name].address += static_cast<int16_t>(opcode & 0x0000FFFF);
+            relocMap[relocation_name].lo16_set = true;
+            relocMap[relocation_name].relocation = rel;
+          }
         break;
       case R_MIPS_26:
         relocMap[relocation_name].address = (m_HeaderSize & 0xF0000000) + ((opcode & 0x03FFFFFF) << 2);
+        relocMap[relocation_name].relocation = rel;
         break;
     }
-    relocMap[relocation_name].relocation = rel;
   }
 
   //Should I validate the .text ones by checking the sig_sym checksum
@@ -341,7 +355,7 @@ auto CN64Sym::TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t rom_offset
         return some_sec_from_obj.name == rel_target_section_name;
       });
       auto relocation_target_section = i.second.relocation.name;
-      section_guesses.push_back(section_guess {
+      auto eee = section_guess {
         .rom_offset = rom_offset, //name better, rom_offset_searched
         .symbol_offset = sig_sym.offset, //name better, symbol_searched_offset
         .section_offset = i.second.address - i.second.relocation.addend - m_HeaderSize, //need to do calculation based on address
@@ -351,10 +365,11 @@ auto CN64Sym::TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t rom_offset
         .rel = rel_info::local_rel,
         .section_name = i.second.relocation.name, //name is the correct section for LOCAL
         .object_name = sig_obj.file //object is correct for LOCAL
-      });
+      };
+      section_guesses.push_back(eee);
     } else {
       if (auto rel_symbol = sym_map.find(i.second.relocation.name); rel_symbol != sym_map.end()) {
-        section_guesses.push_back(section_guess {
+        auto blah = section_guess {
           .rom_offset = rom_offset,
           .symbol_offset = rel_symbol->second.symbol_offset,
           .section_offset = i.second.address - i.second.relocation.addend - rel_symbol->second.symbol_offset - m_HeaderSize,
@@ -364,7 +379,8 @@ auto CN64Sym::TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t rom_offset
           .rel = rel_info::global_rel,
           .section_name = rel_symbol->second.section_name,
           .object_name = rel_symbol->second.object_name
-        });
+        };
+        section_guesses.push_back(blah);
       } else {
         //symbol not found, not really an error, as it could be extern
         //and intended to be defined by library consumer
@@ -430,11 +446,15 @@ auto TestSymbol(sig_symbol const &symbol, const uint8_t* buffer) -> bool {
 
   size_t offset = 0;
 
-  auto reloc = symbol.relocations.begin();
+  auto reloc_copy = symbol.relocations;
+
+  std::sort(reloc_copy.begin(), reloc_copy.end(), [](sig_relocation &a, sig_relocation &b) { return a.offset < b.offset; });
+
+  auto reloc = reloc_copy.begin();
   uint64_t const crcA_limit = std::min(symbol.size, reinterpret_cast<uint64_t>(UINT64_C(8)));
 
   // resultA.reset();
-  while (offset < crcA_limit && reloc != symbol.relocations.end()) {
+  while (offset < crcA_limit && reloc != reloc_copy.end()) {
     if (offset < reloc->offset) {
       // read up to relocated op or crcA_limit
       resultA.process_bytes(&buffer[offset], std::min(reloc->offset, crcA_limit) - offset);
@@ -464,7 +484,7 @@ auto TestSymbol(sig_symbol const &symbol, const uint8_t* buffer) -> bool {
     return false;
   }
 
-  while (offset < symbol.size && reloc != symbol.relocations.end()) {
+  while (offset < symbol.size && reloc != reloc_copy.end()) {
     if (offset < reloc->offset) {
       // read up to relocated op
       resultB.process_bytes(&buffer[offset], reloc->offset - offset);

@@ -289,7 +289,7 @@ std::vector<sig_object> CN64Sig::ProcessLibrary(const char *path) {
           });
         }
 
-        std::sort(sig_sym.relocations.begin(), sig_sym.relocations.end(), [](sig_relocation &a, sig_relocation &b) { return a.offset < b.offset; });
+        //std::sort(sig_sym.relocations.begin(), sig_sym.relocations.end(), [](sig_relocation &a, sig_relocation &b) { return a.offset < b.offset; });
 
         //// STRIP AND RELCOS END
 

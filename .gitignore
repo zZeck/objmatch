@@ -13,3 +13,5 @@ out
 log*.sig
 log*.yaml
 testout*
+ultralog2
+ultralog3

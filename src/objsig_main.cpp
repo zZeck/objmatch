@@ -16,8 +16,6 @@ auto main(int argc, const char *argv[]) -> int {
     return EXIT_FAILURE;
   }
 
-  ObjSig objsig;
-
   for (int argi = 1; argi < argc; argi++) {
     // printf("[%s]\n", argv[argi]);
 
@@ -36,13 +34,11 @@ auto main(int argc, const char *argv[]) -> int {
         if (argi + 1 >= argc) {
           printf("Error: No path specified for '-l'\n");
         }
-        objsig.AddLibPath(argv[argi + 1]);
+        ObjSigAnalyze(argv[argi + 1]);
         argi++;
         break;
     }
   }
-
-  objsig.Run();
 
   return EXIT_SUCCESS;
 }

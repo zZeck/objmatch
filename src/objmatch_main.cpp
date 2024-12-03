@@ -6,7 +6,6 @@
 #include "objmatch.h"
 
 auto main(int argc, const char* argv[]) -> int {
-  ObjMatch objmatch;
   const char* binPath = nullptr;
 
   if (argc < 2) {
@@ -22,11 +21,13 @@ auto main(int argc, const char* argv[]) -> int {
 
   binPath = argv[1];
 
-  if (!objmatch.LoadBinary(binPath)) {
-    printf("Error: Failed to load '%s'\n", binPath);
-    return EXIT_FAILURE;
-  }
+  //if (!objmatch.LoadBinary(binPath)) {
+  //  printf("Error: Failed to load '%s'\n", binPath);
+  //  return EXIT_FAILURE;
+  //}
 
+  const char * libPath = "";
+  const char * headerSize = "0";
   for (int argi = 2; argi < argc; argi++) {
     if (argv[argi][0] != '-') {
       printf("Error: Unexpected '%s' in command line\n", argv[argi]);
@@ -43,7 +44,8 @@ auto main(int argc, const char* argv[]) -> int {
         if (argi + 1 >= argc) {
           printf("Error: No path specified for '-l'\n");
         }
-        objmatch.AddLibPath(argv[argi + 1]);
+        libPath = argv[argi + 1];
+        //objmatch.AddLibPath(argv[argi + 1]);
         argi++;
         break;
       case 'h':
@@ -51,7 +53,8 @@ auto main(int argc, const char* argv[]) -> int {
           printf("Error: No header size specified for '-h'\n");
           return EXIT_FAILURE;
         }
-        objmatch.SetHeaderSize(strtoul(argv[argi + 1], nullptr, 0));
+        //objmatch.SetHeaderSize(strtoul(argv[argi + 1], nullptr, 0));
+        headerSize = argv[argi + 1];
         argi++;
         break;
       /*case 'o':
@@ -71,7 +74,7 @@ auto main(int argc, const char* argv[]) -> int {
     }
   }
 
-  if (!objmatch.Run()) {
+  if (!ObjMatchBloop(binPath, libPath, strtoul(headerSize, nullptr, 0))) {
     return EXIT_FAILURE;
   }
 

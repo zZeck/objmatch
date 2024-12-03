@@ -12,25 +12,21 @@
 #include "objsig.h"
 #include "signature.h"
 
-void ObjSig::AddLibPath(const char *path) { m_LibPaths.push_back(path); }
-
-auto ObjSig::Run() -> bool {
-  for (auto &m_LibPath : m_LibPaths) {
-    const std::filesystem::path fs_path{m_LibPath};
-    if (fs_path.extension() == ".a") {
-      auto temp = ProcessLibrary(fs_path.c_str());
-      YAML::Node node;
-      node = temp;
-      YAML::Emitter emitter;
-      emitter << node;
-      printf("%s\n", emitter.c_str());
-    }
+auto ObjSigAnalyze(const char *path) -> bool {
+  const std::filesystem::path fs_path{path};
+  if (fs_path.extension() == ".a") {
+    auto temp = ProcessLibrary(fs_path.c_str());
+    YAML::Node node;
+    node = temp;
+    YAML::Emitter emitter;
+    emitter << node;
+    printf("%s\n", emitter.c_str());
   }
 
   return true;
 }
 
-std::vector<sig_object> ObjSig::ProcessLibrary(const char *path) {
+std::vector<sig_object> ProcessLibrary(const char *path) {
   auto archive_file_descriptor = open(path, O_RDONLY);
 
   // move to main or static?

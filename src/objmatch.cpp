@@ -36,57 +36,54 @@
 #endif
 #endif
 
-ObjMatch::~ObjMatch() { delete[] m_Binary; }
+auto LoadBinary(const char *binPath) -> binary_info {
+  binary_info b_info;
 
-auto ObjMatch::LoadBinary(const char *binPath) -> bool {
-  if (m_Binary != nullptr) {
-    delete[] m_Binary;
-    m_BinarySize = 0;
-  }
+  b_info.m_BinarySize = 0;
 
   std::ifstream file;
   file.open(binPath, std::ifstream::binary);
 
-  if (!file.is_open()) {
-    return false;
-  }
+  //if (!file.is_open()) {
+  //  return false;
+  //}
 
   file.seekg(0, std::ifstream::end);
-  m_BinarySize = file.tellg();
-  m_Binary = new uint8_t[m_BinarySize];
+  b_info.m_BinarySize = file.tellg();
+  b_info.m_Binary = std::vector<uint8_t>(b_info.m_BinarySize);
 
   file.seekg(0, std::ifstream::beg);
-  file.read(reinterpret_cast<char *>(m_Binary), m_BinarySize);
+  file.read(reinterpret_cast<char *>(b_info.m_Binary.data()), b_info.m_BinarySize);
 
   const std::filesystem::path fs_path{binPath};
-  if ((fs_path.extension() == ".z64" || fs_path.extension() == ".n64" || fs_path.extension() == ".v64") && !m_bOverrideHeaderSize) {
-    if (m_BinarySize < 0x101000) {
-      delete[] m_Binary;
-      m_BinarySize = 0;
-      return false;
-    }
+  if ((fs_path.extension() == ".z64" || fs_path.extension() == ".n64" || fs_path.extension() == ".v64") /*&& !m_bOverrideHeaderSize*/) {
+    //if (b_info.m_BinarySize < 0x101000) {
+    //  delete[] b_info.m_Binary;
+    //  b_info.m_BinarySize = 0;
+    //  //return false;
+    //}
 
-    uint32_t const endianCheck = bswap32(*reinterpret_cast<uint32_t *>(&m_Binary[0x00]));
+    uint32_t const endianCheck = bswap32(*reinterpret_cast<uint32_t *>(&b_info.m_Binary[0x00]));
 
     switch (endianCheck) {
       case 0x80371240:
         break;
       case 0x40123780:
-        for (size_t i = 0; i < m_BinarySize; i += sizeof(uint32_t)) {
-          *reinterpret_cast<uint32_t *>(&m_Binary[i]) = bswap32(*reinterpret_cast<uint32_t *>(&m_Binary[i]));
+        for (size_t i = 0; i < b_info.m_BinarySize; i += sizeof(uint32_t)) {
+          *reinterpret_cast<uint32_t *>(&b_info.m_Binary[i]) = bswap32(*reinterpret_cast<uint32_t *>(&b_info.m_Binary[i]));
         }
         break;
       case 0x37804012:
-        for (size_t i = 0; i < m_BinarySize; i += sizeof(uint16_t)) {
-          *reinterpret_cast<uint16_t *>(&m_Binary[i]) = bswap16(*reinterpret_cast<uint16_t *>(&m_Binary[i]));
+        for (size_t i = 0; i < b_info.m_BinarySize; i += sizeof(uint16_t)) {
+          *reinterpret_cast<uint16_t *>(&b_info.m_Binary[i]) = bswap16(*reinterpret_cast<uint16_t *>(&b_info.m_Binary[i]));
         }
         break;
     }
 
-    uint32_t entryPoint = bswap32(*reinterpret_cast<uint32_t *>(&m_Binary[0x08]));
+    uint32_t entryPoint = bswap32(*reinterpret_cast<uint32_t *>(&b_info.m_Binary[0x08]));
 
     boost::crc_32_type result;
-    result.process_bytes(&m_Binary[0x40], 0xFC0);
+    result.process_bytes(&b_info.m_Binary[0x40], 0xFC0);
     uint32_t bootCheck = result.checksum();
 
     switch (bootCheck) {
@@ -98,284 +95,10 @@ auto ObjMatch::LoadBinary(const char *binPath) -> bool {
         break;
     }
 
-    m_HeaderSize = entryPoint - 0x1000;
+    b_info.m_HeaderSize = entryPoint - 0x1000;
   }
 
-  return true;
-}
-
-void ObjMatch::AddLibPath(const char *libPath) { m_LibPaths.push_back(libPath); }
-
-auto ObjMatch::SetOutputPath(const char *path) -> bool {
-  m_OutputFile.open(path, std::ofstream::binary);
-
-  if (!m_OutputFile.is_open()) {
-    m_Output = &std::cout;
-    return false;
-  }
-
-  m_Output = &m_OutputFile;
-  return true;
-}
-
-void ObjMatch::SetHeaderSize(uint32_t headerSize) {
-  m_bOverrideHeaderSize = true;
-  m_HeaderSize = headerSize;
-}
-
-auto ObjMatch::Run() -> bool {
-  if (m_Binary == nullptr) {
-    return false;
-  }
-
-  m_LikelyFunctionOffsets.clear();
-
-  for (size_t i = 0; i < m_BinarySize; i += sizeof(uint32_t)) {
-    uint32_t const word = bswap32(*reinterpret_cast<uint32_t *>(&m_Binary[i]));
-
-    // JR RA (+ 8)
-    if (word == 0x03E00008) {
-      if (*reinterpret_cast<uint32_t *>(&m_Binary[i + 8]) != 0x00000000) {
-        m_LikelyFunctionOffsets.insert(i + 8);
-      }
-    }
-
-    // ADDIU SP, SP, -n
-    if ((word & 0xFFFF0000) == 0x27BD0000 && static_cast<int16_t>(word & 0xFFFF) < 0) {
-      m_LikelyFunctionOffsets.insert(i);
-    }
-
-    // todo JALs?
-  }
-
-  for (auto &m_LibPath : m_LibPaths) {
-    const std::filesystem::path fs_path{m_LibPath};
-    if (fs_path.extension() == ".sig") {
-      YAML::Node node = YAML::LoadFile(fs_path);
-      auto sigs = node.as<std::vector<sig_object>>();
-
-      auto temp = ProcessSignatureFile(sigs);
-
-      YAML::Node node2;
-      node2 = temp;
-      YAML::Emitter emitter;
-      emitter.SetMapFormat(YAML::Flow);
-      emitter << node2;
-      printf("%s\n", emitter.c_str());
-    }
-  }
-
-  return true;
-}
-
-std::vector<splat_out> ObjMatch::ProcessSignatureFile(std::vector<sig_object> const &sigFile) {
-  std::unordered_map<std::string, sig_obj_sec_sym> sym_map;
-  for (auto const &sig_obj : sigFile) {
-    for (auto const &sig_section : sig_obj.sections) {
-      for (auto const &sig_sym : sig_section.symbols) {
-        // should not be any repeats because of ODR
-        sym_map[sig_sym.symbol] = sig_obj_sec_sym{.symbol_name = sig_sym.symbol,
-                                                  .section_name = sig_section.name,
-                                                  .object_name = sig_obj.file,
-                                                  .symbol_offset = sig_sym.offset,
-                                                  .section_size = sig_section.size};
-      }
-    }
-  }
-
-  std::vector<section_guess> results;
-  for (auto const &sig_obj : sigFile) {
-    for (auto const &sig_section : sig_obj.sections) {
-      if (sig_section.name != ".text") continue;
-      for (auto const &sig_sym : sig_section.symbols) {
-        // multiple functions with the same crc can't be distinguished
-        if (sig_sym.duplicate_crc) continue;
-        std::vector<uint32_t> candidates;
-        std::copy_if(m_LikelyFunctionOffsets.cbegin(), m_LikelyFunctionOffsets.cend(), std::back_inserter(candidates),
-                     [&sig_obj, &sig_section, &sig_sym, this](uint32_t rom_offset) {
-                       auto temp = &m_Binary[rom_offset];
-                       return TestSymbol(sig_sym, temp);
-                     });
-        // crc could match random code in game rom
-        // if there are multiple matches, impossible to tell which is legit.
-        // If no results, also done.
-        if (candidates.size() != 1) continue;
-        auto rom_offset = candidates[0];
-        // should have a condition on the offset loop, so finding
-        // result stops search? symbol could theoretically have been linked in more than once
-        auto guesses = TestSignatureSymbol(sig_sym, rom_offset, sig_section, sig_obj, sym_map);
-        results.insert(results.end(), guesses.begin(), guesses.end());
-      }
-    }
-  }
-
-  std::sort(results.begin(), results.end(), [](section_guess const &a, section_guess const &b) {
-    auto obj_name_cmp = a.object_name <=> b.object_name;
-    if (obj_name_cmp != 0) return obj_name_cmp < 0;
-    auto sec_name_cmp = a.section_name <=> b.section_name;
-    if (sec_name_cmp != 0) return sec_name_cmp < 0;
-    auto rel_cmp = a.rel <=> b.rel;
-    if (rel_cmp != 0) return rel_cmp < 0;
-    auto sig_offset_cmp = a.symbol_offset <=> b.symbol_offset;
-    return sig_offset_cmp < 0;
-  });
-
-  auto last = std::unique(results.begin(), results.end(),
-                          [](section_guess const &a, section_guess const &b) { return a.object_name == b.object_name && a.section_name == b.section_name; });
-
-  results.erase(last, results.end());
-
-  std::sort(results.begin(), results.end(), [](section_guess const &a, section_guess const &b) { return a.section_offset < b.section_offset; });
-
-  std::vector<splat_out> blah;
-  // can crash if vector is empty it seems?
-  for (auto section_guess = results.begin(); section_guess < results.end() - 1; ++section_guess) {
-    auto off_comp = section_guess[0].section_offset + section_guess[0].section_size <=> section_guess[1].section_offset;
-    if (off_comp == 0) {
-      blah.push_back(splat_out{.start = section_guess[0].section_offset,
-                               .vram = section_guess[0].section_vram,
-                               .type = section_guess[0].section_name,
-                               .name = section_guess[0].object_name});
-      // careful, potential issue if NEXT section is omitted due to overlap
-      // the endpoint of THIS section is lost
-    }
-    if (off_comp < 0) {
-      blah.push_back(splat_out{.start = section_guess[0].section_offset,
-                               .vram = section_guess[0].section_vram,
-                               .type = section_guess[0].section_name,
-                               .name = section_guess[0].object_name});
-      blah.push_back(splat_out{.start = section_guess[0].section_offset + section_guess[0].section_size,
-                               .vram = section_guess[0].section_vram + section_guess[0].section_size,
-                               .type = "bin",
-                               .name = std::format("0x{:x}", section_guess[0].section_offset + section_guess[0].section_size)});
-    }
-    if (off_comp > 0) {
-      // error, sections would overlap.
-      // print bin section to mark prior section's end
-      blah.push_back(splat_out{.start = section_guess[0].section_offset,
-                               .vram = section_guess[0].section_vram,
-                               .type = "bin",
-                               .name = std::format("0x{:x}", section_guess[0].section_offset)});
-    }
-  }
-
-  auto final = results.back();
-
-  blah.push_back(splat_out{.start = final.section_offset, .vram = final.section_vram, .type = final.section_name, .name = final.object_name});
-  blah.push_back(splat_out{.start = final.section_offset + final.section_size,
-                           .vram = final.section_vram + final.section_size,
-                           .type = "bin",
-                           .name = std::format("0x{:x}", final.section_offset + final.section_size)});
-
-  return blah;
-}
-
-auto ObjMatch::TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t rom_offset, sig_section const &sig_sec, sig_object const &sig_obj,
-                                   std::unordered_map<std::string, sig_obj_sec_sym> sym_map) -> std::vector<section_guess> {
-  typedef struct {
-    uint32_t address;
-    sig_relocation relocation;
-    bool local;
-    bool hi16_set;
-    bool lo16_set;
-  } test_t;
-  std::map<std::string, test_t> relocMap;
-
-  std::vector<section_guess> section_guesses;
-
-  // add results from relocations
-  for (auto rel : sig_sym.relocations) {
-    auto temp = &m_Binary[rom_offset + rel.offset];
-    auto temp1 = *reinterpret_cast<uint32_t *>(temp);
-
-    uint32_t const opcode = bswap32(temp1);
-
-    auto relocation_name = rel.name;
-
-    if (rel.local) {
-      const std::filesystem::path fs_path{sig_obj.file};
-      char relocName[128];
-      snprintf(relocName, sizeof(relocName), "%s_%s_%04X", fs_path.stem().c_str(), &rel.name.c_str()[1], rel.addend);
-      relocation_name = std::string(relocName);
-      relocMap[relocation_name].local = true;
-    }
-
-    switch (rel.type) {
-      case R_MIPS_HI16:
-        if (!relocMap[relocation_name].hi16_set) {
-          relocMap[relocation_name].address = (opcode & 0x0000FFFF) << 16;
-          relocMap[relocation_name].hi16_set = true;
-          relocMap[relocation_name].relocation = rel;
-        }
-        break;
-      case R_MIPS_LO16:
-        // this is to prevent multiple references to the same symbol
-        // from all adding their lo16 to the address
-        if (!relocMap[relocation_name].lo16_set) {
-          relocMap[relocation_name].address += static_cast<int16_t>(opcode & 0x0000FFFF);
-          relocMap[relocation_name].lo16_set = true;
-          relocMap[relocation_name].relocation = rel;
-        }
-        break;
-      case R_MIPS_26:
-        relocMap[relocation_name].address = (m_HeaderSize & 0xF0000000) + ((opcode & 0x03FFFFFF) << 2);
-        relocMap[relocation_name].relocation = rel;
-        break;
-    }
-  }
-
-  // Should I validate the .text ones by checking the sig_sym checksum
-  // for the location?
-  for (auto &i : relocMap) {
-    if (i.second.local) {
-      auto rel_target_section_name = i.second.relocation.name;
-      auto rel_target_section = std::find_if(sig_obj.sections.begin(), sig_obj.sections.end(), [rel_target_section_name](sig_section some_sec_from_obj) {
-        return some_sec_from_obj.name == rel_target_section_name;
-      });
-      auto relocation_target_section = i.second.relocation.name;
-      auto eee = section_guess{
-          .rom_offset = rom_offset,                                                        // name better, rom_offset_searched
-          .symbol_offset = sig_sym.offset,                                                 // name better, symbol_searched_offset
-          .section_offset = i.second.address - i.second.relocation.addend - m_HeaderSize,  // need to do calculation based on address
-          .section_vram =
-              i.second.address - i.second.relocation.addend,  // address from ROM code, minus the addend from reloc, to get to start of local section
-          .symbol_name = sig_sym.symbol,                      // name better, symbol_name searched
-          .section_size = rel_target_section->size,
-          .rel = rel_info::local_rel,
-          .section_name = i.second.relocation.name,  // name is the correct section for LOCAL
-          .object_name = sig_obj.file                // object is correct for LOCAL
-      };
-      section_guesses.push_back(eee);
-    } else {
-      if (auto rel_symbol = sym_map.find(i.second.relocation.name); rel_symbol != sym_map.end()) {
-        auto blah = section_guess{.rom_offset = rom_offset,
-                                  .symbol_offset = rel_symbol->second.symbol_offset,
-                                  .section_offset = i.second.address - i.second.relocation.addend - rel_symbol->second.symbol_offset - m_HeaderSize,
-                                  .section_vram = i.second.address - i.second.relocation.addend - rel_symbol->second.symbol_offset,
-                                  .symbol_name = rel_symbol->second.symbol_name,
-                                  .section_size = rel_symbol->second.section_size,
-                                  .rel = rel_info::global_rel,
-                                  .section_name = rel_symbol->second.section_name,
-                                  .object_name = rel_symbol->second.object_name};
-        section_guesses.push_back(blah);
-      } else {
-        // symbol not found, not really an error, as it could be extern
-        // and intended to be defined by library consumer
-      }
-    }
-  }
-
-  section_guesses.push_back(section_guess{.rom_offset = rom_offset,
-                                          .symbol_offset = sig_sym.offset,
-                                          .section_offset = rom_offset - sig_sym.offset,
-                                          .section_vram = m_HeaderSize + rom_offset - sig_sym.offset,
-                                          .symbol_name = sig_sym.symbol,
-                                          .section_size = sig_sec.size,
-                                          .rel = rel_info::not_rel,
-                                          .section_name = sig_sec.name,
-                                          .object_name = sig_obj.file});
-
-  return section_guesses;
+  return b_info;
 }
 
 void ReadStrippedWord(uint8_t *dst, const uint8_t *src, int relType) {
@@ -482,4 +205,260 @@ auto TestSymbol(sig_symbol const &symbol, const uint8_t *buffer) -> bool {
   crcB = resultB.checksum();
 
   return (symbol.crc_all == crcB);
+}
+
+auto ObjMatchBloop(const char* binPath, const char* libPath, uint32_t headerSize) -> bool {
+  auto b_info = LoadBinary(binPath);
+
+  if (b_info.m_Binary.size() == 0) {
+    return false;
+  }
+
+  std::set<uint32_t> m_LikelyFunctionOffsets;
+  //m_LikelyFunctionOffsets.clear();
+
+  for (size_t i = 0; i < b_info.m_BinarySize; i += sizeof(uint32_t)) {
+    uint32_t const word = bswap32(*reinterpret_cast<uint32_t *>(&b_info.m_Binary[i]));
+
+    // JR RA (+ 8)
+    if (word == 0x03E00008) {
+      if (*reinterpret_cast<uint32_t *>(&b_info.m_Binary[i + 8]) != 0x00000000) {
+        m_LikelyFunctionOffsets.insert(i + 8);
+      }
+    }
+
+    // ADDIU SP, SP, -n
+    if ((word & 0xFFFF0000) == 0x27BD0000 && static_cast<int16_t>(word & 0xFFFF) < 0) {
+      m_LikelyFunctionOffsets.insert(i);
+    }
+
+    // todo JALs?
+  }
+
+  const std::filesystem::path fs_path{libPath};
+  if (fs_path.extension() == ".sig") {
+    YAML::Node node = YAML::LoadFile(fs_path);
+    auto sigs = node.as<std::vector<sig_object>>();
+
+    auto temp = ProcessSignatureFile(sigs, b_info, m_LikelyFunctionOffsets);
+
+    YAML::Node node2;
+    node2 = temp;
+    YAML::Emitter emitter;
+    emitter.SetMapFormat(YAML::Flow);
+    emitter << node2;
+    printf("%s\n", emitter.c_str());
+  }
+
+  return true;
+}
+
+std::vector<splat_out> ProcessSignatureFile(std::vector<sig_object> const &sigFile, binary_info const &b_info, std::set<uint32_t> m_LikelyFunctionOffsets) {
+  std::unordered_map<std::string, sig_obj_sec_sym> sym_map;
+  for (auto const &sig_obj : sigFile) {
+    for (auto const &sig_section : sig_obj.sections) {
+      for (auto const &sig_sym : sig_section.symbols) {
+        // should not be any repeats because of ODR
+        sym_map[sig_sym.symbol] = sig_obj_sec_sym{.symbol_name = sig_sym.symbol,
+                                                  .section_name = sig_section.name,
+                                                  .object_name = sig_obj.file,
+                                                  .symbol_offset = sig_sym.offset,
+                                                  .section_size = sig_section.size};
+      }
+    }
+  }
+
+  std::vector<section_guess> results;
+  for (auto const &sig_obj : sigFile) {
+    for (auto const &sig_section : sig_obj.sections) {
+      if (sig_section.name != ".text") continue;
+      for (auto const &sig_sym : sig_section.symbols) {
+        // multiple functions with the same crc can't be distinguished
+        if (sig_sym.duplicate_crc) continue;
+        std::vector<uint32_t> candidates;
+        std::copy_if(m_LikelyFunctionOffsets.cbegin(), m_LikelyFunctionOffsets.cend(), std::back_inserter(candidates),
+                     [&sig_obj, &sig_section, &sig_sym, &b_info](uint32_t rom_offset) {
+                       auto temp = &b_info.m_Binary[rom_offset];
+                       return TestSymbol(sig_sym, temp);
+                     });
+        // crc could match random code in game rom
+        // if there are multiple matches, impossible to tell which is legit.
+        // If no results, also done.
+        if (candidates.size() != 1) continue;
+        auto rom_offset = candidates[0];
+        // should have a condition on the offset loop, so finding
+        // result stops search? symbol could theoretically have been linked in more than once
+        auto guesses = TestSignatureSymbol(sig_sym, rom_offset, sig_section, sig_obj, sym_map, b_info);
+        results.insert(results.end(), guesses.begin(), guesses.end());
+      }
+    }
+  }
+
+  std::sort(results.begin(), results.end(), [](section_guess const &a, section_guess const &b) {
+    auto obj_name_cmp = a.object_name <=> b.object_name;
+    if (obj_name_cmp != 0) return obj_name_cmp < 0;
+    auto sec_name_cmp = a.section_name <=> b.section_name;
+    if (sec_name_cmp != 0) return sec_name_cmp < 0;
+    auto rel_cmp = a.rel <=> b.rel;
+    if (rel_cmp != 0) return rel_cmp < 0;
+    auto sig_offset_cmp = a.symbol_offset <=> b.symbol_offset;
+    return sig_offset_cmp < 0;
+  });
+
+  auto last = std::unique(results.begin(), results.end(),
+                          [](section_guess const &a, section_guess const &b) { return a.object_name == b.object_name && a.section_name == b.section_name; });
+
+  results.erase(last, results.end());
+
+  std::sort(results.begin(), results.end(), [](section_guess const &a, section_guess const &b) { return a.section_offset < b.section_offset; });
+
+  std::vector<splat_out> blah;
+  // can crash if vector is empty it seems?
+  for (auto section_guess = results.begin(); section_guess < results.end() - 1; ++section_guess) {
+    auto off_comp = section_guess[0].section_offset + section_guess[0].section_size <=> section_guess[1].section_offset;
+    if (off_comp == 0) {
+      blah.push_back(splat_out{.start = section_guess[0].section_offset,
+                               .vram = section_guess[0].section_vram,
+                               .type = section_guess[0].section_name,
+                               .name = section_guess[0].object_name});
+      // careful, potential issue if NEXT section is omitted due to overlap
+      // the endpoint of THIS section is lost
+    }
+    if (off_comp < 0) {
+      blah.push_back(splat_out{.start = section_guess[0].section_offset,
+                               .vram = section_guess[0].section_vram,
+                               .type = section_guess[0].section_name,
+                               .name = section_guess[0].object_name});
+      blah.push_back(splat_out{.start = section_guess[0].section_offset + section_guess[0].section_size,
+                               .vram = section_guess[0].section_vram + section_guess[0].section_size,
+                               .type = "bin",
+                               .name = std::format("0x{:x}", section_guess[0].section_offset + section_guess[0].section_size)});
+    }
+    if (off_comp > 0) {
+      // error, sections would overlap.
+      // print bin section to mark prior section's end
+      blah.push_back(splat_out{.start = section_guess[0].section_offset,
+                               .vram = section_guess[0].section_vram,
+                               .type = "bin",
+                               .name = std::format("0x{:x}", section_guess[0].section_offset)});
+    }
+  }
+
+  auto final = results.back();
+
+  blah.push_back(splat_out{.start = final.section_offset, .vram = final.section_vram, .type = final.section_name, .name = final.object_name});
+  blah.push_back(splat_out{.start = final.section_offset + final.section_size,
+                           .vram = final.section_vram + final.section_size,
+                           .type = "bin",
+                           .name = std::format("0x{:x}", final.section_offset + final.section_size)});
+
+  return blah;
+}
+
+auto TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t rom_offset, sig_section const &sig_sec, sig_object const &sig_obj,
+                                   std::unordered_map<std::string, sig_obj_sec_sym> sym_map, binary_info const &b_info) -> std::vector<section_guess> {
+  typedef struct {
+    uint32_t address;
+    sig_relocation relocation;
+    bool local;
+    bool hi16_set;
+    bool lo16_set;
+  } test_t;
+  std::map<std::string, test_t> relocMap;
+
+  std::vector<section_guess> section_guesses;
+
+  // add results from relocations
+  for (auto rel : sig_sym.relocations) {
+    auto temp = &b_info.m_Binary[rom_offset + rel.offset];
+    auto temp1 = *reinterpret_cast<const uint32_t *>(temp);
+
+    uint32_t const opcode = bswap32(temp1);
+
+    auto relocation_name = rel.name;
+
+    if (rel.local) {
+      const std::filesystem::path fs_path{sig_obj.file};
+      char relocName[128];
+      snprintf(relocName, sizeof(relocName), "%s_%s_%04X", fs_path.stem().c_str(), &rel.name.c_str()[1], rel.addend);
+      relocation_name = std::string(relocName);
+      relocMap[relocation_name].local = true;
+    }
+
+    switch (rel.type) {
+      case R_MIPS_HI16:
+        if (!relocMap[relocation_name].hi16_set) {
+          relocMap[relocation_name].address = (opcode & 0x0000FFFF) << 16;
+          relocMap[relocation_name].hi16_set = true;
+          relocMap[relocation_name].relocation = rel;
+        }
+        break;
+      case R_MIPS_LO16:
+        // this is to prevent multiple references to the same symbol
+        // from all adding their lo16 to the address
+        if (!relocMap[relocation_name].lo16_set) {
+          relocMap[relocation_name].address += static_cast<int16_t>(opcode & 0x0000FFFF);
+          relocMap[relocation_name].lo16_set = true;
+          relocMap[relocation_name].relocation = rel;
+        }
+        break;
+      case R_MIPS_26:
+        relocMap[relocation_name].address = (b_info.m_HeaderSize & 0xF0000000) + ((opcode & 0x03FFFFFF) << 2);
+        relocMap[relocation_name].relocation = rel;
+        break;
+    }
+  }
+
+  // Should I validate the .text ones by checking the sig_sym checksum
+  // for the location?
+  for (auto &i : relocMap) {
+    if (i.second.local) {
+      auto rel_target_section_name = i.second.relocation.name;
+      auto rel_target_section = std::find_if(sig_obj.sections.begin(), sig_obj.sections.end(), [rel_target_section_name](sig_section some_sec_from_obj) {
+        return some_sec_from_obj.name == rel_target_section_name;
+      });
+      auto relocation_target_section = i.second.relocation.name;
+      auto eee = section_guess{
+          .rom_offset = rom_offset,                                                        // name better, rom_offset_searched
+          .symbol_offset = sig_sym.offset,                                                 // name better, symbol_searched_offset
+          .section_offset = i.second.address - i.second.relocation.addend - b_info.m_HeaderSize,  // need to do calculation based on address
+          .section_vram =
+              i.second.address - i.second.relocation.addend,  // address from ROM code, minus the addend from reloc, to get to start of local section
+          .symbol_name = sig_sym.symbol,                      // name better, symbol_name searched
+          .section_size = rel_target_section->size,
+          .rel = rel_info::local_rel,
+          .section_name = i.second.relocation.name,  // name is the correct section for LOCAL
+          .object_name = sig_obj.file                // object is correct for LOCAL
+      };
+      section_guesses.push_back(eee);
+    } else {
+      if (auto rel_symbol = sym_map.find(i.second.relocation.name); rel_symbol != sym_map.end()) {
+        auto blah = section_guess{.rom_offset = rom_offset,
+                                  .symbol_offset = rel_symbol->second.symbol_offset,
+                                  .section_offset = i.second.address - i.second.relocation.addend - rel_symbol->second.symbol_offset - b_info.m_HeaderSize,
+                                  .section_vram = i.second.address - i.second.relocation.addend - rel_symbol->second.symbol_offset,
+                                  .symbol_name = rel_symbol->second.symbol_name,
+                                  .section_size = rel_symbol->second.section_size,
+                                  .rel = rel_info::global_rel,
+                                  .section_name = rel_symbol->second.section_name,
+                                  .object_name = rel_symbol->second.object_name};
+        section_guesses.push_back(blah);
+      } else {
+        // symbol not found, not really an error, as it could be extern
+        // and intended to be defined by library consumer
+      }
+    }
+  }
+
+  section_guesses.push_back(section_guess{.rom_offset = rom_offset,
+                                          .symbol_offset = sig_sym.offset,
+                                          .section_offset = rom_offset - sig_sym.offset,
+                                          .section_vram = b_info.m_HeaderSize + rom_offset - sig_sym.offset,
+                                          .symbol_name = sig_sym.symbol,
+                                          .section_size = sig_sec.size,
+                                          .rel = rel_info::not_rel,
+                                          .section_name = sig_sec.name,
+                                          .object_name = sig_obj.file});
+
+  return section_guesses;
 }

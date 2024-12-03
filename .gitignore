@@ -15,3 +15,5 @@ log*.yaml
 testout*
 ultralog2
 ultralog3
+
+*.sig

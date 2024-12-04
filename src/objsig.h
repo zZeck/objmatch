@@ -9,6 +9,6 @@
 
 #include "signature.h"
 
-std::vector<sig_object> ProcessLibrary(const char *path);
+auto ProcessLibrary(const char *path) -> std::vector<sig_object>;
 
 auto ObjSigAnalyze(const char *path) -> bool;

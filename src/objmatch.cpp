@@ -1,3 +1,5 @@
+#include "objmatch.h"
+
 #include <fcntl.h>
 #include <gelf.h>
 #include <libelf.h>
@@ -13,7 +15,6 @@
 #include <numeric>
 #include <set>
 
-#include "objmatch.h"
 #include "splat_out.h"
 
 #ifndef bswap32
@@ -44,10 +45,6 @@ auto LoadBinary(const char *binPath) -> binary_info {
   std::ifstream file;
   file.open(binPath, std::ifstream::binary);
 
-  //if (!file.is_open()) {
-  //  return false;
-  //}
-
   file.seekg(0, std::ifstream::end);
   b_info.m_BinarySize = file.tellg();
   b_info.m_Binary = std::vector<uint8_t>(b_info.m_BinarySize);
@@ -57,13 +54,8 @@ auto LoadBinary(const char *binPath) -> binary_info {
 
   const std::filesystem::path fs_path{binPath};
   if ((fs_path.extension() == ".z64" || fs_path.extension() == ".n64" || fs_path.extension() == ".v64") /*&& !m_bOverrideHeaderSize*/) {
-    //if (b_info.m_BinarySize < 0x101000) {
-    //  delete[] b_info.m_Binary;
-    //  b_info.m_BinarySize = 0;
-    //  //return false;
-    //}
 
-    uint32_t const endianCheck = bswap32(*reinterpret_cast<uint32_t *>(&b_info.m_Binary[0x00]));
+    uint32_t const endianCheck = bswap32(*reinterpret_cast<uint32_t *>(b_info.m_Binary.data()));
 
     switch (endianCheck) {
       case 0x80371240:
@@ -84,7 +76,7 @@ auto LoadBinary(const char *binPath) -> binary_info {
 
     boost::crc_32_type result;
     result.process_bytes(&b_info.m_Binary[0x40], 0xFC0);
-    uint32_t bootCheck = result.checksum();
+    auto const bootCheck = result.checksum();
 
     switch (bootCheck) {
       case 0x0B050EE0:  // 6103
@@ -101,7 +93,7 @@ auto LoadBinary(const char *binPath) -> binary_info {
   return b_info;
 }
 
-void ReadStrippedWord(uint8_t *dst, const uint8_t *src, int relType) {
+void ReadStrippedWord(uint8_t *dst, const uint8_t *src, uint64_t relType) {
   memcpy(dst, src, 4);
 
   switch (relType) {
@@ -199,7 +191,6 @@ auto TestSymbol(sig_symbol const &symbol, const uint8_t *buffer) -> bool {
 
   if (offset < symbol.size) {
     resultB.process_bytes(&buffer[offset], symbol.size - offset);
-    offset = symbol.size;
   }
 
   crcB = resultB.checksum();
@@ -207,15 +198,14 @@ auto TestSymbol(sig_symbol const &symbol, const uint8_t *buffer) -> bool {
   return (symbol.crc_all == crcB);
 }
 
-auto ObjMatchBloop(const char* binPath, const char* libPath, uint32_t headerSize) -> bool {
+auto ObjMatchBloop(const char *binPath, const char *libPath) -> bool {
   auto b_info = LoadBinary(binPath);
 
-  if (b_info.m_Binary.size() == 0) {
+  if (b_info.m_Binary.empty()) {
     return false;
   }
 
   std::set<uint32_t> m_LikelyFunctionOffsets;
-  //m_LikelyFunctionOffsets.clear();
 
   for (size_t i = 0; i < b_info.m_BinarySize; i += sizeof(uint32_t)) {
     uint32_t const word = bswap32(*reinterpret_cast<uint32_t *>(&b_info.m_Binary[i]));
@@ -237,7 +227,7 @@ auto ObjMatchBloop(const char* binPath, const char* libPath, uint32_t headerSize
 
   const std::filesystem::path fs_path{libPath};
   if (fs_path.extension() == ".sig") {
-    YAML::Node node = YAML::LoadFile(fs_path);
+    const YAML::Node node = YAML::LoadFile(fs_path);
     auto sigs = node.as<std::vector<sig_object>>();
 
     auto temp = ProcessSignatureFile(sigs, b_info, m_LikelyFunctionOffsets);
@@ -253,7 +243,7 @@ auto ObjMatchBloop(const char* binPath, const char* libPath, uint32_t headerSize
   return true;
 }
 
-std::vector<splat_out> ProcessSignatureFile(std::vector<sig_object> const &sigFile, binary_info const &b_info, std::set<uint32_t> m_LikelyFunctionOffsets) {
+auto ProcessSignatureFile(std::vector<sig_object> const &sigFile, binary_info const &b_info, const std::set<uint32_t> &m_LikelyFunctionOffsets) -> std::vector<splat_out> {
   std::unordered_map<std::string, sig_obj_sec_sym> sym_map;
   for (auto const &sig_obj : sigFile) {
     for (auto const &sig_section : sig_obj.sections) {
@@ -356,20 +346,20 @@ std::vector<splat_out> ProcessSignatureFile(std::vector<sig_object> const &sigFi
 }
 
 auto TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t rom_offset, sig_section const &sig_sec, sig_object const &sig_obj,
-                                   std::unordered_map<std::string, sig_obj_sec_sym> sym_map, binary_info const &b_info) -> std::vector<section_guess> {
-  typedef struct {
-    uint32_t address;
-    sig_relocation relocation;
-    bool local;
-    bool hi16_set;
-    bool lo16_set;
-  } test_t;
+                         std::unordered_map<std::string, sig_obj_sec_sym> sym_map, binary_info const &b_info) -> std::vector<section_guess> {
+  using test_t = struct test_t{
+    uint32_t address{};
+    sig_relocation relocation{};
+    bool local{};
+    bool hi16_set{};
+    bool lo16_set{};
+  };
   std::map<std::string, test_t> relocMap;
 
   std::vector<section_guess> section_guesses;
 
   // add results from relocations
-  for (auto rel : sig_sym.relocations) {
+  for (const auto &rel : sig_sym.relocations) {
     auto temp = &b_info.m_Binary[rom_offset + rel.offset];
     auto temp1 = *reinterpret_cast<const uint32_t *>(temp);
 
@@ -414,19 +404,18 @@ auto TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t rom_offset, sig_sec
   for (auto &i : relocMap) {
     if (i.second.local) {
       auto rel_target_section_name = i.second.relocation.name;
-      auto rel_target_section = std::find_if(sig_obj.sections.begin(), sig_obj.sections.end(), [rel_target_section_name](sig_section some_sec_from_obj) {
+      auto rel_target_section = std::find_if(sig_obj.sections.begin(), sig_obj.sections.end(), [rel_target_section_name](const sig_section &some_sec_from_obj) {
         return some_sec_from_obj.name == rel_target_section_name;
       });
       auto relocation_target_section = i.second.relocation.name;
-      auto eee = section_guess{
-          .rom_offset = rom_offset,                                                        // name better, rom_offset_searched
-          .symbol_offset = sig_sym.offset,                                                 // name better, symbol_searched_offset
+      auto eee = section_guess {
+          .rom_offset = rom_offset, // name better, rom_offset_searched
+          .section_vram = i.second.address - i.second.relocation.addend,  // address from ROM code, minus the addend from reloc, to get to start of local section
+          .symbol_offset = sig_sym.offset,        // name better, symbol_searched_offset
           .section_offset = i.second.address - i.second.relocation.addend - b_info.m_HeaderSize,  // need to do calculation based on address
-          .section_vram =
-              i.second.address - i.second.relocation.addend,  // address from ROM code, minus the addend from reloc, to get to start of local section
-          .symbol_name = sig_sym.symbol,                      // name better, symbol_name searched
           .section_size = rel_target_section->size,
           .rel = rel_info::local_rel,
+          .symbol_name = sig_sym.symbol,                      // name better, symbol_name searched
           .section_name = i.second.relocation.name,  // name is the correct section for LOCAL
           .object_name = sig_obj.file                // object is correct for LOCAL
       };
@@ -434,12 +423,12 @@ auto TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t rom_offset, sig_sec
     } else {
       if (auto rel_symbol = sym_map.find(i.second.relocation.name); rel_symbol != sym_map.end()) {
         auto blah = section_guess{.rom_offset = rom_offset,
+                                  .section_vram = i.second.address - i.second.relocation.addend - rel_symbol->second.symbol_offset,
                                   .symbol_offset = rel_symbol->second.symbol_offset,
                                   .section_offset = i.second.address - i.second.relocation.addend - rel_symbol->second.symbol_offset - b_info.m_HeaderSize,
-                                  .section_vram = i.second.address - i.second.relocation.addend - rel_symbol->second.symbol_offset,
-                                  .symbol_name = rel_symbol->second.symbol_name,
                                   .section_size = rel_symbol->second.section_size,
                                   .rel = rel_info::global_rel,
+                                  .symbol_name = rel_symbol->second.symbol_name,
                                   .section_name = rel_symbol->second.section_name,
                                   .object_name = rel_symbol->second.object_name};
         section_guesses.push_back(blah);
@@ -451,12 +440,12 @@ auto TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t rom_offset, sig_sec
   }
 
   section_guesses.push_back(section_guess{.rom_offset = rom_offset,
+                                          .section_vram = b_info.m_HeaderSize + rom_offset - sig_sym.offset,
                                           .symbol_offset = sig_sym.offset,
                                           .section_offset = rom_offset - sig_sym.offset,
-                                          .section_vram = b_info.m_HeaderSize + rom_offset - sig_sym.offset,
-                                          .symbol_name = sig_sym.symbol,
                                           .section_size = sig_sec.size,
                                           .rel = rel_info::not_rel,
+                                          .symbol_name = sig_sym.symbol,
                                           .section_name = sig_sec.name,
                                           .object_name = sig_obj.file});
 

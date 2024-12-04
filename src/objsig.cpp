@@ -1,3 +1,5 @@
+#include "objsig.h"
+
 #include <fcntl.h>
 #include <gelf.h>
 #include <libelf.h>
@@ -9,7 +11,6 @@
 #include <filesystem>
 #include <vector>
 
-#include "objsig.h"
 #include "signature.h"
 
 auto ObjSigAnalyze(const char *path) -> bool {
@@ -26,8 +27,8 @@ auto ObjSigAnalyze(const char *path) -> bool {
   return true;
 }
 
-std::vector<sig_object> ProcessLibrary(const char *path) {
-  auto archive_file_descriptor = open(path, O_RDONLY);
+auto ProcessLibrary(const char *path) -> std::vector<sig_object> {
+  auto archive_file_descriptor = open(path, O_RDONLY | O_CLOEXEC);
 
   // move to main or static?
   if (elf_version(EV_CURRENT) == EV_NONE) {
@@ -77,7 +78,7 @@ std::vector<sig_object> ProcessLibrary(const char *path) {
 
         if (strcmp(section_name, ".text") == 0 || strcmp(section_name, ".data") == 0 || strcmp(section_name, ".rodata") == 0 ||
             strcmp(section_name, ".bss") == 0) {
-          auto index = elf_ndxscn(section);
+          elf_ndxscn(section); //err check
           sections.push_back(section_relocations{.section = section});
         }
 
@@ -127,7 +128,7 @@ std::vector<sig_object> ProcessLibrary(const char *path) {
       auto section_name = elf_strptr(object_file_elf, section_header_string_table_index, section_header.sh_name);
 
       auto section_index = elf_ndxscn(sec_rec.section);
-      auto section_data = elf_getdata(sec_rec.section, nullptr);
+      auto section_data = elf_getdata(sec_rec.section, nullptr); //what if section_data is null?
 
       GElf_Shdr rel_section_header;
       auto rel_section_header_ptr = gelf_getshdr(sec_rec.relocations, &rel_section_header);  // error if not returns &section_header?
@@ -139,12 +140,11 @@ std::vector<sig_object> ProcessLibrary(const char *path) {
 
       for (int nSymbol = 0; nSymbol < symbol_count; nSymbol++) {
         GElf_Sym libelf_symbol;
-        auto symbol_ptr = gelf_getsym(symbol_data, nSymbol, &libelf_symbol);
+        gelf_getsym(symbol_data, nSymbol, &libelf_symbol); //err check
 
         auto symbol_referencing_section_index = libelf_symbol.st_shndx;
         auto symbol_name = elf_strptr(object_file_elf, symtab_header.sh_link, libelf_symbol.st_name);
         auto symbol_type = GELF_ST_TYPE(libelf_symbol.st_info);
-        auto symbol_bind = GELF_ST_BIND(libelf_symbol.st_info);
         auto symbol_size = libelf_symbol.st_size;
         auto symbol_offset = libelf_symbol.st_value;
 
@@ -172,7 +172,7 @@ std::vector<sig_object> ProcessLibrary(const char *path) {
             continue;
           }
 
-          Elf32_Word extended_section_index;
+          Elf32_Word extended_section_index{};
           GElf_Sym rel_symbol;  // should I be using symmem directly? why use the returned pointer?
           auto rel_symbol_index = GELF_R_SYM(relocation.r_info);
           auto rel_symbol_ptr = gelf_getsymshndx(symbol_data, xndxdata, rel_symbol_index, &rel_symbol,
@@ -184,7 +184,6 @@ std::vector<sig_object> ProcessLibrary(const char *path) {
           if (rel_symbol_ptr == nullptr) continue;
 
           auto rel_symbol_name = elf_strptr(object_file_elf, symtab_header.sh_link, rel_symbol.st_name);
-          auto rel_symbol_type = GELF_ST_TYPE(rel_symbol.st_info);
           auto rel_symbol_binding = GELF_ST_BIND(rel_symbol.st_info);
 
           auto section_referenced_by_symbol = elf_getscn(object_file_elf, rel_symbol.st_shndx);
@@ -194,8 +193,9 @@ std::vector<sig_object> ProcessLibrary(const char *path) {
           auto relocation_type = GELF_R_TYPE(relocation.r_info);
 
           // HOW TO HANDLE OTHER TYPES NOW?
-          if (section_data->d_type != ELF_T_BYTE) {
-          }  // this is an error
+          //section_data or d_type is possibly null? lint error
+          //if (section_data->d_type != ELF_T_BYTE) {
+          //}  // this is an error
 
           auto opcode = reinterpret_cast<uint8_t *>(section_data->d_buf) + relocation.r_offset;
 
@@ -222,7 +222,7 @@ std::vector<sig_object> ProcessLibrary(const char *path) {
             // next relocation must be LO16
             auto relocation2_type = GELF_R_TYPE(relocation2.r_info);
             if (relocation2_type != R_MIPS_LO16) {
-              exit(EXIT_FAILURE);
+              //error
             }
 
             auto opcode2 = reinterpret_cast<const uint8_t *>(section_data->d_buf) + relocation2.r_offset;
@@ -231,7 +231,6 @@ std::vector<sig_object> ProcessLibrary(const char *path) {
             addend += static_cast<int16_t>(opcode2BE & 0xFFFF);
             lastHi16Addend = addend;
 
-            // printf("%08X\n", addend);
           } else if (relocation_type == R_MIPS_LO16) {
             addend = lastHi16Addend;
           } else if (relocation_type == R_MIPS_26) {
@@ -271,8 +270,6 @@ std::vector<sig_object> ProcessLibrary(const char *path) {
                                                        .local = is_local,
                                                        .name = std::string(rel_symbol_name)});
         }
-
-        // std::sort(sig_sym.relocations.begin(), sig_sym.relocations.end(), [](sig_relocation &a, sig_relocation &b) { return a.offset < b.offset; });
 
         //// STRIP AND RELCOS END
 

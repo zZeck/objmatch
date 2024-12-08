@@ -5,6 +5,8 @@
 #include <libelf.h>
 #include <unistd.h>
 
+#include <algorithm>
+#include <bit>
 #include <boost/crc.hpp>
 #include <cstdio>
 #include <filesystem>
@@ -13,78 +15,70 @@
 #include <iostream>
 #include <map>
 #include <numeric>
+#include <print>
 #include <set>
 
 #include "splat_out.h"
 
-#ifndef bswap32
-#ifdef __GNUC__
-#define bswap32 __builtin_bswap32
-#elif _MSC_VER
-#define bswap32 _byteswap_ulong
-#else
-#define bswap32(n) (((unsigned)n & 0xFF000000) >> 24 | (n & 0xFF00) << 8 | (n & 0xFF0000) >> 8 | n << 24)
-#endif
-#endif
+namespace {
+auto readswap32(const std::span<const uint8_t, 4> &buf) -> uint32_t {
+  uint32_t word{};
+  std::memcpy(&word, buf.data(), 4);
 
-#ifndef bswap16
-#ifdef __GNUC__
-#define bswap16 __builtin_bswap16
-#elif _MSC_VER
-#define bswap16 _byteswap_ushort
-#else
-#define bswap16(n) (((unsigned)n & 0xFF00) >> 8 | n << 8)
-#endif
-#endif
+  return std::byteswap(word);
+}
+
+auto read32(const std::span<const uint8_t, 4> &buf) -> uint32_t {
+  uint32_t word{};
+  std::memcpy(&word, buf.data(), 4);
+
+  return word;
+}
+
+auto readswap16(const std::span<const uint8_t, 2> &buf) -> uint16_t {
+  uint16_t word{};
+  std::memcpy(&word, buf.data(), 2);
+
+  return std::byteswap(word);
+}
 
 auto LoadBinary(const char *binPath) -> binary_info {
   binary_info b_info;
-
-  b_info.m_BinarySize = 0;
-
   std::ifstream file;
   file.open(binPath, std::ifstream::binary);
 
-  file.seekg(0, std::ifstream::end);
-  b_info.m_BinarySize = file.tellg();
+  b_info.m_BinarySize = std::filesystem::file_size(binPath);
   b_info.m_Binary = std::vector<uint8_t>(b_info.m_BinarySize);
 
-  file.seekg(0, std::ifstream::beg);
-  file.read(reinterpret_cast<char *>(b_info.m_Binary.data()), b_info.m_BinarySize);
+  b_info.m_Binary.reserve(b_info.m_BinarySize);
+  b_info.m_Binary.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
 
   const std::filesystem::path fs_path{binPath};
   if ((fs_path.extension() == ".z64" || fs_path.extension() == ".n64" || fs_path.extension() == ".v64") /*&& !m_bOverrideHeaderSize*/) {
+    uint32_t const endianCheck = readswap32(std::span<const uint8_t, 4>{b_info.m_Binary.data(), 4});
 
-    uint32_t const endianCheck = bswap32(*reinterpret_cast<uint32_t *>(b_info.m_Binary.data()));
-
-    switch (endianCheck) {
-      case 0x80371240:
-        break;
-      case 0x40123780:
-        for (size_t i = 0; i < b_info.m_BinarySize; i += sizeof(uint32_t)) {
-          *reinterpret_cast<uint32_t *>(&b_info.m_Binary[i]) = bswap32(*reinterpret_cast<uint32_t *>(&b_info.m_Binary[i]));
-        }
-        break;
-      case 0x37804012:
-        for (size_t i = 0; i < b_info.m_BinarySize; i += sizeof(uint16_t)) {
-          *reinterpret_cast<uint16_t *>(&b_info.m_Binary[i]) = bswap16(*reinterpret_cast<uint16_t *>(&b_info.m_Binary[i]));
-        }
-        break;
+    if (endianCheck == 0x40123780) {
+      for (size_t i = 0; i < b_info.m_BinarySize; i += sizeof(uint32_t)) {
+        uint32_t const data = readswap32(std::span<const uint8_t, 4>{&b_info.m_Binary[i], 4});
+        std::memcpy(&b_info.m_Binary[i], &data, 4);
+      }
+    } else if (endianCheck == 0x37804012) {
+      for (size_t i = 0; i < b_info.m_BinarySize; i += sizeof(uint16_t)) {
+        uint16_t const data = readswap16(std::span<const uint8_t, 2>{&b_info.m_Binary[i], 2});
+        std::memcpy(&b_info.m_Binary[i], &data, 2);
+      }
     }
 
-    uint32_t entryPoint = bswap32(*reinterpret_cast<uint32_t *>(&b_info.m_Binary[0x08]));
+    uint32_t entryPoint = readswap32(std::span<const uint8_t, 4>{&b_info.m_Binary[0x08], 4});
 
     boost::crc_32_type result;
     result.process_bytes(&b_info.m_Binary[0x40], 0xFC0);
     auto const bootCheck = result.checksum();
 
-    switch (bootCheck) {
-      case 0x0B050EE0:  // 6103
-        entryPoint -= 0x100000;
-        break;
-      case 0xACC8580A:  // 6106
-        entryPoint -= 0x200000;
-        break;
+    if (bootCheck == 0x0B050EE0) {  // 6103
+      entryPoint -= 0x100000;
+    } else if (bootCheck == 0xACC8580A) {  // 6106
+      entryPoint -= 0x200000;
     }
 
     b_info.m_HeaderSize = entryPoint - 0x1000;
@@ -92,28 +86,19 @@ auto LoadBinary(const char *binPath) -> binary_info {
 
   return b_info;
 }
-
-void ReadStrippedWord(uint8_t *dst, const uint8_t *src, uint64_t relType) {
-  memcpy(dst, src, 4);
-
-  switch (relType) {
-    case 4:
-      // targ26
-      dst[0] &= 0xFC;
-      dst[1] = 0x00;
-      dst[2] = 0x00;
-      dst[3] = 0x00;
-      break;
-    case 5:
-    case 6:
-      // hi/lo16
-      dst[2] = 0x00;
-      dst[3] = 0x00;
-      break;
-  }
 }
 
-auto TestSymbol(sig_symbol const &symbol, const uint8_t *buffer) -> bool {
+auto ReadStrippedWord(const std::span<const uint8_t, 4> &src, uint64_t relType) -> std::array<uint8_t, 4> {
+  // targ26
+  if (relType == 4) return std::array<uint8_t, 4>{static_cast<uint8_t>(src[0] & 0xFC), 0x00, 0x00, 0x00};
+  // hi/lo16
+  if (relType == 5 || relType == 6) return std::array<uint8_t, 4>{src[0], src[1], 0x00, 0x00};
+  std::array<uint8_t, 4> dst{};
+  std::ranges::copy(src, dst.begin());
+  return dst;
+}
+
+auto TestSymbol(sig_symbol const &symbol, const std::span<const uint8_t> &buffer) -> bool {
   boost::crc_32_type resultA;
   boost::crc_32_type resultB;
 
@@ -121,42 +106,41 @@ auto TestSymbol(sig_symbol const &symbol, const uint8_t *buffer) -> bool {
   uint32_t crcB = 0;
 
   if (symbol.relocations.empty()) {
-    resultA.process_bytes(buffer, std::min(symbol.size, reinterpret_cast<uint64_t>(UINT64_C(8))));
+    resultA.process_bytes(buffer.data(), std::min(symbol.size, static_cast<uint64_t>(8)));
     auto crcA = resultA.checksum();
 
-    if (symbol.crc_8 != crcA) {
-      return false;
-    }
+    if (symbol.crc_8 != crcA) return false;
 
-    resultB.process_bytes(buffer, symbol.size);
+    resultB.process_bytes(buffer.data(), symbol.size);
     auto crcB = resultB.checksum();
 
-    return (symbol.crc_all == crcB);
+    return symbol.crc_all == crcB;
   }
 
   size_t offset = 0;
 
   auto reloc_copy = symbol.relocations;
 
-  std::sort(reloc_copy.begin(), reloc_copy.end(), [](sig_relocation &a, sig_relocation &b) { return a.offset < b.offset; });
+  std::ranges::sort(reloc_copy, [](sig_relocation &a, sig_relocation &b) { return a.offset < b.offset; });
 
   auto reloc = reloc_copy.begin();
-  uint64_t const crcA_limit = std::min(symbol.size, reinterpret_cast<uint64_t>(UINT64_C(8)));
+  uint64_t const crcA_limit = std::min(symbol.size, static_cast<uint64_t>(8));
 
   // resultA.reset();
   while (offset < crcA_limit && reloc != reloc_copy.end()) {
     if (offset < reloc->offset) {
       // read up to relocated op or crcA_limit
+      // if (buffer.size() < offset) return false;
       resultA.process_bytes(&buffer[offset], std::min(reloc->offset, crcA_limit) - offset);
       resultB.process_bytes(&buffer[offset], std::min(reloc->offset, crcA_limit) - offset);
 
       offset = std::min(reloc->offset, crcA_limit);
     } else if (offset == reloc->offset) {
       // strip and read relocated op
-      uint8_t op[4];
-      ReadStrippedWord(op, &buffer[offset], reloc->type);
-      resultA.process_bytes(op, 4);
-      resultB.process_bytes(op, 4);
+      const std::span<const uint8_t, 4> blah(&buffer[offset], 4);
+      auto op = ReadStrippedWord(blah, reloc->type);
+      resultA.process_bytes(op.data(), 4);
+      resultB.process_bytes(op.data(), 4);
       offset += 4;
       reloc++;
     }
@@ -170,9 +154,7 @@ auto TestSymbol(sig_symbol const &symbol, const uint8_t *buffer) -> bool {
 
   crcA = resultA.checksum();
 
-  if (symbol.crc_8 != crcA) {
-    return false;
-  }
+  if (symbol.crc_8 != crcA) return false;
 
   while (offset < symbol.size && reloc != reloc_copy.end()) {
     if (offset < reloc->offset) {
@@ -181,9 +163,9 @@ auto TestSymbol(sig_symbol const &symbol, const uint8_t *buffer) -> bool {
       offset = reloc->offset;
     } else if (offset == reloc->offset) {
       // strip and read relocated op
-      uint8_t op[4];
-      ReadStrippedWord(op, &buffer[offset], reloc->type);
-      resultB.process_bytes(op, sizeof(op));
+      const std::span<const uint8_t, 4> blah(&buffer[offset], 4);
+      auto op = ReadStrippedWord(blah, reloc->type);
+      resultB.process_bytes(op.data(), sizeof(op));
       offset += 4;
       reloc++;
     }
@@ -195,24 +177,22 @@ auto TestSymbol(sig_symbol const &symbol, const uint8_t *buffer) -> bool {
 
   crcB = resultB.checksum();
 
-  return (symbol.crc_all == crcB);
+  return symbol.crc_all == crcB;
 }
 
 auto ObjMatchBloop(const char *binPath, const char *libPath) -> bool {
   auto b_info = LoadBinary(binPath);
 
-  if (b_info.m_Binary.empty()) {
-    return false;
-  }
+  if (b_info.m_Binary.empty()) return false;
 
   std::set<uint32_t> m_LikelyFunctionOffsets;
 
   for (size_t i = 0; i < b_info.m_BinarySize; i += sizeof(uint32_t)) {
-    uint32_t const word = bswap32(*reinterpret_cast<uint32_t *>(&b_info.m_Binary[i]));
+    uint32_t const word = readswap32(std::span<const uint8_t, 4>{&b_info.m_Binary[i], 4});
 
     // JR RA (+ 8)
     if (word == 0x03E00008) {
-      if (*reinterpret_cast<uint32_t *>(&b_info.m_Binary[i + 8]) != 0x00000000) {
+      if (read32(std::span<const uint8_t, 4>{&b_info.m_Binary[i + 8], 4}) != 0x00000000) {
         m_LikelyFunctionOffsets.insert(i + 8);
       }
     }
@@ -237,13 +217,14 @@ auto ObjMatchBloop(const char *binPath, const char *libPath) -> bool {
     YAML::Emitter emitter;
     emitter.SetMapFormat(YAML::Flow);
     emitter << node2;
-    printf("%s\n", emitter.c_str());
+    std::println("{}", emitter.c_str());
   }
 
   return true;
 }
 
-auto ProcessSignatureFile(std::vector<sig_object> const &sigFile, binary_info const &b_info, const std::set<uint32_t> &m_LikelyFunctionOffsets) -> std::vector<splat_out> {
+auto ProcessSignatureFile(std::vector<sig_object> const &sigFile, binary_info const &b_info, const std::set<uint32_t> &m_LikelyFunctionOffsets)
+    -> std::vector<splat_out> {
   std::unordered_map<std::string, sig_obj_sec_sym> sym_map;
   for (auto const &sig_obj : sigFile) {
     for (auto const &sig_section : sig_obj.sections) {
@@ -266,10 +247,10 @@ auto ProcessSignatureFile(std::vector<sig_object> const &sigFile, binary_info co
         // multiple functions with the same crc can't be distinguished
         if (sig_sym.duplicate_crc) continue;
         std::vector<uint32_t> candidates;
-        std::copy_if(m_LikelyFunctionOffsets.cbegin(), m_LikelyFunctionOffsets.cend(), std::back_inserter(candidates),
+        std::ranges::copy_if(m_LikelyFunctionOffsets, std::back_inserter(candidates),
                      [&sig_obj, &sig_section, &sig_sym, &b_info](uint32_t rom_offset) {
-                       auto temp = &b_info.m_Binary[rom_offset];
-                       return TestSymbol(sig_sym, temp);
+                       const std::span<const uint8_t> blah(&b_info.m_Binary[rom_offset], b_info.m_Binary.size() - rom_offset);
+                       return TestSymbol(sig_sym, blah);
                      });
         // crc could match random code in game rom
         // if there are multiple matches, impossible to tell which is legit.
@@ -284,7 +265,7 @@ auto ProcessSignatureFile(std::vector<sig_object> const &sigFile, binary_info co
     }
   }
 
-  std::sort(results.begin(), results.end(), [](section_guess const &a, section_guess const &b) {
+  std::ranges::sort(results, [](section_guess const &a, section_guess const &b) {
     auto obj_name_cmp = a.object_name <=> b.object_name;
     if (obj_name_cmp != 0) return obj_name_cmp < 0;
     auto sec_name_cmp = a.section_name <=> b.section_name;
@@ -295,12 +276,12 @@ auto ProcessSignatureFile(std::vector<sig_object> const &sigFile, binary_info co
     return sig_offset_cmp < 0;
   });
 
-  auto last = std::unique(results.begin(), results.end(),
+  const auto [first, last] = std::ranges::unique(results,
                           [](section_guess const &a, section_guess const &b) { return a.object_name == b.object_name && a.section_name == b.section_name; });
 
-  results.erase(last, results.end());
+  results.erase(first, last);
 
-  std::sort(results.begin(), results.end(), [](section_guess const &a, section_guess const &b) { return a.section_offset < b.section_offset; });
+  std::ranges::sort(results, [](section_guess const &a, section_guess const &b) { return a.section_offset < b.section_offset; });
 
   std::vector<splat_out> blah;
   // can crash if vector is empty it seems?
@@ -347,7 +328,7 @@ auto ProcessSignatureFile(std::vector<sig_object> const &sigFile, binary_info co
 
 auto TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t rom_offset, sig_section const &sig_sec, sig_object const &sig_obj,
                          std::unordered_map<std::string, sig_obj_sec_sym> sym_map, binary_info const &b_info) -> std::vector<section_guess> {
-  using test_t = struct test_t{
+  using test_t = struct test_t {
     uint32_t address{};
     sig_relocation relocation{};
     bool local{};
@@ -360,18 +341,13 @@ auto TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t rom_offset, sig_sec
 
   // add results from relocations
   for (const auto &rel : sig_sym.relocations) {
-    auto temp = &b_info.m_Binary[rom_offset + rel.offset];
-    auto temp1 = *reinterpret_cast<const uint32_t *>(temp);
-
-    uint32_t const opcode = bswap32(temp1);
+    uint32_t const opcode = readswap32(std::span<const uint8_t, 4>{&b_info.m_Binary[rom_offset + rel.offset], 4});
 
     auto relocation_name = rel.name;
 
     if (rel.local) {
       const std::filesystem::path fs_path{sig_obj.file};
-      char relocName[128];
-      snprintf(relocName, sizeof(relocName), "%s_%s_%04X", fs_path.stem().c_str(), &rel.name.c_str()[1], rel.addend);
-      relocation_name = std::string(relocName);
+      relocation_name = std::format("{}_{}_{:04X}", fs_path.stem().string(), std::string_view{rel.name}.substr(1), rel.addend); 
       relocMap[relocation_name].local = true;
     }
 
@@ -396,6 +372,8 @@ auto TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t rom_offset, sig_sec
         relocMap[relocation_name].address = (b_info.m_HeaderSize & 0xF0000000) + ((opcode & 0x03FFFFFF) << 2);
         relocMap[relocation_name].relocation = rel;
         break;
+      default:
+        break;
     }
   }
 
@@ -404,18 +382,18 @@ auto TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t rom_offset, sig_sec
   for (auto &i : relocMap) {
     if (i.second.local) {
       auto rel_target_section_name = i.second.relocation.name;
-      auto rel_target_section = std::find_if(sig_obj.sections.begin(), sig_obj.sections.end(), [rel_target_section_name](const sig_section &some_sec_from_obj) {
+      auto rel_target_section = std::ranges::find_if(sig_obj.sections, [rel_target_section_name](const sig_section &some_sec_from_obj) {
         return some_sec_from_obj.name == rel_target_section_name;
       });
-      auto relocation_target_section = i.second.relocation.name;
-      auto eee = section_guess {
-          .rom_offset = rom_offset, // name better, rom_offset_searched
-          .section_vram = i.second.address - i.second.relocation.addend,  // address from ROM code, minus the addend from reloc, to get to start of local section
-          .symbol_offset = sig_sym.offset,        // name better, symbol_searched_offset
+      auto eee = section_guess{
+          .rom_offset = rom_offset,  // name better, rom_offset_searched
+          .section_vram =
+              i.second.address - i.second.relocation.addend,  // address from ROM code, minus the addend from reloc, to get to start of local section
+          .symbol_offset = sig_sym.offset,                    // name better, symbol_searched_offset
           .section_offset = i.second.address - i.second.relocation.addend - b_info.m_HeaderSize,  // need to do calculation based on address
           .section_size = rel_target_section->size,
           .rel = rel_info::local_rel,
-          .symbol_name = sig_sym.symbol,                      // name better, symbol_name searched
+          .symbol_name = sig_sym.symbol,             // name better, symbol_name searched
           .section_name = i.second.relocation.name,  // name is the correct section for LOCAL
           .object_name = sig_obj.file                // object is correct for LOCAL
       };

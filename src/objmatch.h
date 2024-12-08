@@ -11,25 +11,25 @@
 #include "splat_out.h"
 
 using binary_info = struct binary_info {
-  std::vector<uint8_t> m_Binary{};
+  std::vector<uint8_t> m_Binary;
   size_t m_BinarySize{};
   uint32_t m_HeaderSize{};
 };
 
 using bin_func_offsets = struct bin_func_offsets {
   uint8_t *m_Binary{};
-  std::set<uint32_t> m_LikelyFunctionOffsets{};
+  std::set<uint32_t> m_LikelyFunctionOffsets;
 };
 
 using sig_obj_sec_sym = struct sig_obj_sec_sym {
-  std::string symbol_name{};
-  std::string section_name{};
-  std::string object_name{};
+  std::string symbol_name;
+  std::string section_name;
+  std::string object_name;
   uint64_t symbol_offset{};
   uint64_t section_size{};
 };
 
-enum rel_info { not_rel, local_rel, global_rel };
+enum rel_info : uint8_t { not_rel, local_rel, global_rel };
 
 using section_guess = struct section_guess {
   uint64_t rom_offset{};
@@ -38,13 +38,14 @@ using section_guess = struct section_guess {
   uint64_t section_offset{};
   uint64_t section_size{};
   rel_info rel{};
-  std::string symbol_name{};
-  std::string section_name{};
-  std::string object_name{};
+  std::string symbol_name;
+  std::string section_name;
+  std::string object_name;
 };
 
-static void ReadStrippedWord(uint8_t *dst, const uint8_t *src, uint64_t relType);
-auto TestSymbol(sig_symbol const &symbol, const uint8_t *buffer) -> bool;
+auto ReadStrippedWord(const std::span<const uint8_t, 4> &src, uint64_t relType) -> std::array<uint8_t, 4>;
+
+auto TestSymbol(sig_symbol const &symbol, const std::span<const uint8_t> &buffer) -> bool;
 
 auto ObjMatchBloop(const char *binPath, const char *libPath) -> bool;
 

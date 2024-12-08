@@ -2,14 +2,14 @@
     "version": 8,
     "configurePresets": [
         {
-            "name": "Clang 17.0.6 x86_64-pc-linux-gnu",
-            "displayName": "Clang 17.0.6 x86_64-pc-linux-gnu",
-            "description": "Using compilers: C = /usr/lib/llvm/17/bin/clang, CXX = /usr/lib/llvm/17/bin/clang++",
+            "name": "Clang 19.1.4 x86_64-pc-linux-gnu",
+            "displayName": "Clang 19.1.4 x86_64-pc-linux-gnu",
+            "description": "Using compilers: C = /usr/lib/llvm/19/bin/clang, CXX = /usr/lib/llvm/19/bin/clang++",
             "binaryDir": "${sourceDir}/out/build/${presetName}",
             "cacheVariables": {
                 "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
-                "CMAKE_C_COMPILER": "/usr/lib/llvm/17/bin/clang",
-                "CMAKE_CXX_COMPILER": "/usr/lib/llvm/17/bin/clang++",
+                "CMAKE_C_COMPILER": "/usr/lib/llvm/19/bin/clang",
+                "CMAKE_CXX_COMPILER": "/usr/lib/llvm/19/bin/clang++",
                 "CMAKE_BUILD_TYPE": "Debug"
             }
         }

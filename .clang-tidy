@@ -27,6 +27,7 @@ Checks:
   - '-objc-*'
   - '-openmp-*'
   - '-llvmlibc-*'
+  - '-hicpp-use-nullptr'
 HeaderFilterRegex: '.*'
 CheckOptions:
   - key:             readability-braces-around-statements.ShortStatementLines

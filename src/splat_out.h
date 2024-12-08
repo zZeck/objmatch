@@ -9,8 +9,8 @@
 using splat_out = struct splat_out {
   uint64_t start{};
   uint64_t vram{};
-  std::string type{};
-  std::string name{};
+  std::string type;
+  std::string name;
 };
 
 namespace YAML {

@@ -11,7 +11,7 @@ using sig_relocation = struct sig_relocation {
   uint64_t offset{};
   uint32_t addend{};
   bool local{};
-  std::string name{};
+  std::string name;
 };
 
 using sig_symbol = struct sig_symbol {
@@ -20,19 +20,19 @@ using sig_symbol = struct sig_symbol {
   uint32_t crc_8{};
   uint32_t crc_all{};
   bool duplicate_crc{};
-  std::string symbol{};
-  std::vector<sig_relocation> relocations{};
+  std::string symbol;
+  std::vector<sig_relocation> relocations;
 };
 
 using sig_section = struct sig_section {
   uint64_t size{};
-  std::string name{};
-  std::vector<sig_symbol> symbols{};
+  std::string name;
+  std::vector<sig_symbol> symbols;
 };
 
 using sig_object = struct sig_object {
-  std::string file{};
-  std::vector<sig_section> sections{};
+  std::string file;
+  std::vector<sig_section> sections;
 };
 
 namespace YAML {

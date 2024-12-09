@@ -6,12 +6,23 @@
 #include <yaml-cpp/yaml.h>
 
 #include <algorithm>
+#include <bit>
 #include <boost/crc.hpp>
 #include <cstring>
 #include <filesystem>
+#include <print>
 #include <vector>
 
 #include "signature.h"
+
+namespace {
+auto readswap32(const std::span<const uint8_t, 4> &buf) -> uint32_t {
+  uint32_t word{};
+  std::memcpy(&word, buf.data(), 4);
+
+  return std::byteswap(word);
+}
+}
 
 auto ObjSigAnalyze(const char *path) -> bool {
   const std::filesystem::path fs_path{path};
@@ -21,7 +32,7 @@ auto ObjSigAnalyze(const char *path) -> bool {
     node = temp;
     YAML::Emitter emitter;
     emitter << node;
-    printf("%s\n", emitter.c_str());
+    std::println("{}", emitter.c_str());
   }
 
   return true;
@@ -31,10 +42,8 @@ auto ProcessLibrary(const char *path) -> std::vector<sig_object> {
   auto archive_file_descriptor = open(path, O_RDONLY | O_CLOEXEC);
 
   // move to main or static?
-  if (elf_version(EV_CURRENT) == EV_NONE) {
-    printf("version out of date");
-  }
-
+  if (elf_version(EV_CURRENT) == EV_NONE) std::print("version out of date");
+  
   auto archive_elf = elf_begin(archive_file_descriptor, ELF_C_READ, nullptr);  // null check
 
   auto sig_library = std::vector<sig_object>();
@@ -83,11 +92,9 @@ auto ProcessLibrary(const char *path) -> std::vector<sig_object> {
         }
 
         if (section_header.sh_type == SHT_REL) {
-          if (auto it = std::find_if(sections.begin(), sections.end(),
+          if (auto it = std::ranges::find_if(sections,
                                      [section_header](section_relocations section_rel) {
-                                       auto index = elf_ndxscn(section_rel.section);
-
-                                       return section_header.sh_info == index;
+                                       return section_header.sh_info == elf_ndxscn(section_rel.section);
                                      });
               it != sections.end()) {
             it->relocations = section;
@@ -129,6 +136,7 @@ auto ProcessLibrary(const char *path) -> std::vector<sig_object> {
 
       auto section_index = elf_ndxscn(sec_rec.section);
       auto section_data = elf_getdata(sec_rec.section, nullptr); //what if section_data is null?
+      const std::span<uint8_t> section_span(static_cast<uint8_t *>(section_data->d_buf), section_data->d_size);
 
       GElf_Shdr rel_section_header;
       auto rel_section_header_ptr = gelf_getshdr(sec_rec.relocations, &rel_section_header);  // error if not returns &section_header?
@@ -174,7 +182,7 @@ auto ProcessLibrary(const char *path) -> std::vector<sig_object> {
 
           Elf32_Word extended_section_index{};
           GElf_Sym rel_symbol;  // should I be using symmem directly? why use the returned pointer?
-          auto rel_symbol_index = GELF_R_SYM(relocation.r_info);
+          const int rel_symbol_index = GELF_R_SYM(relocation.r_info);
           auto rel_symbol_ptr = gelf_getsymshndx(symbol_data, xndxdata, rel_symbol_index, &rel_symbol,
                                                  &extended_section_index);  // guess this works fine with extended section index table null?
 
@@ -197,7 +205,7 @@ auto ProcessLibrary(const char *path) -> std::vector<sig_object> {
           //if (section_data->d_type != ELF_T_BYTE) {
           //}  // this is an error
 
-          auto opcode = reinterpret_cast<uint8_t *>(section_data->d_buf) + relocation.r_offset;
+          const std::span<uint8_t, 4> opcode(&section_span[relocation.r_offset], 4);
 
           auto is_local = false;
           uint32_t addend = 0;
@@ -211,7 +219,7 @@ auto ProcessLibrary(const char *path) -> std::vector<sig_object> {
           // the transformation to do here, depends the platform of the elf file
           // But not the platform I'm running on, right? because IN REGISTER, things will be in the expected order
           // probably should add comment explaining why alternatives are bad, alignment issues, host platform issues
-          auto opcodeBE = opcode[0] << 8 * 3 | opcode[1] << 8 * 2 | opcode[2] << 8 * 1 | opcode[3] << 8 * 0;
+          auto opcodeBE = readswap32(opcode);
 
           if (relocation_type == R_MIPS_HI16) {
             addend = (opcodeBE & 0xFFFF) << 16;
@@ -225,8 +233,8 @@ auto ProcessLibrary(const char *path) -> std::vector<sig_object> {
               //error
             }
 
-            auto opcode2 = reinterpret_cast<const uint8_t *>(section_data->d_buf) + relocation2.r_offset;
-            auto opcode2BE = opcode2[0] << 8 * 3 | opcode2[1] << 8 * 2 | opcode2[2] << 8 * 1 | opcode2[3] << 8 * 0;
+            const std::span<uint8_t, 4> opcode2(&section_span[relocation2.r_offset], 4);
+            auto opcode2BE = readswap32(opcode2);
 
             addend += static_cast<int16_t>(opcode2BE & 0xFFFF);
             lastHi16Addend = addend;
@@ -279,11 +287,11 @@ auto ProcessLibrary(const char *path) -> std::vector<sig_object> {
         // This would avoid mutation of the buffer.
         if (section_data != nullptr && section_data->d_buf != nullptr) {
           boost::crc_32_type result;
-          result.process_bytes(&reinterpret_cast<uint8_t *>(section_data->d_buf)[symbol_offset],
-                               std::min(reinterpret_cast<uint64_t>(symbol_size), reinterpret_cast<uint64_t>(UINT64_C(8))));
+          result.process_bytes(&section_span[symbol_offset],
+                               std::min(static_cast<uint64_t>(symbol_size), static_cast<uint64_t>(8)));
           sig_sym.crc_8 = result.checksum();
           result.reset();
-          result.process_bytes(&reinterpret_cast<uint8_t *>(section_data->d_buf)[symbol_offset], symbol_size);
+          result.process_bytes(&section_span[symbol_offset], symbol_size);
           sig_sym.crc_all = result.checksum();
         }
 

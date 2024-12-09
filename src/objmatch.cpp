@@ -69,19 +69,17 @@ auto LoadBinary(const char *binPath) -> binary_info {
       }
     }
 
-    uint32_t entryPoint = readswap32(std::span<const uint8_t, 4>{&b_info.m_Binary[0x08], 4});
-
     boost::crc_32_type result;
     result.process_bytes(&b_info.m_Binary[0x40], 0xFC0);
     auto const bootCheck = result.checksum();
 
-    if (bootCheck == 0x0B050EE0) {  // 6103
-      entryPoint -= 0x100000;
-    } else if (bootCheck == 0xACC8580A) {  // 6106
-      entryPoint -= 0x200000;
-    }
+    const auto entryPointOff = bootCheck == 0x0B050EE0 ? 0x100000 : // 6103
+      bootCheck == 0xACC8580A ? 0x200000 : // 6106
+      0;
 
-    b_info.m_HeaderSize = entryPoint - 0x1000;
+    const uint32_t entryPoint = readswap32(std::span<const uint8_t, 4>{&b_info.m_Binary[0x08], 4});
+
+    b_info.m_HeaderSize = entryPoint - entryPointOff - 0x1000;
   }
 
   return b_info;

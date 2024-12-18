@@ -13,8 +13,6 @@
 #include <print>
 #include <vector>
 
-#include "signature.h"
-
 namespace {
 auto readswap32(const std::span<const uint8_t, 4> &buf) -> uint32_t {
   uint32_t word{};
@@ -28,11 +26,8 @@ auto ObjSigAnalyze(const char *path) -> bool {
   const std::filesystem::path fs_path{path};
   if (fs_path.extension() == ".a") {
     auto temp = ProcessLibrary(fs_path.c_str());
-    YAML::Node node;
-    node = temp;
-    YAML::Emitter emitter;
-    emitter << node;
-    std::println("{}", emitter.c_str());
+    auto output = sig_yaml::serialize(temp);
+    std::println("{}", std::string_view(output));
   }
 
   return true;

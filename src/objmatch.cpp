@@ -12,9 +12,7 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
-#include <iostream>
 #include <map>
-#include <numeric>
 #include <print>
 #include <set>
 
@@ -205,17 +203,22 @@ auto ObjMatchBloop(const char *binPath, const char *libPath) -> bool {
 
   const std::filesystem::path fs_path{libPath};
   if (fs_path.extension() == ".sig") {
-    const YAML::Node node = YAML::LoadFile(fs_path);
-    auto sigs = node.as<std::vector<sig_object>>();
+    std::ifstream file;
+    file.open(libPath, std::ifstream::binary);
+  
+    const auto file_size {std::filesystem::file_size(libPath)};
+    std::vector<char> yaml_data;
+    yaml_data.reserve(file_size);
+  
+    yaml_data.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+
+    auto sigs = sig_yaml::deserialize(yaml_data);
 
     auto temp = ProcessSignatureFile(sigs, b_info, m_LikelyFunctionOffsets);
 
-    YAML::Node node2;
-    node2 = temp;
-    YAML::Emitter emitter;
-    emitter.SetMapFormat(YAML::Flow);
-    emitter << node2;
-    std::println("{}", emitter.c_str());
+    const auto output = splat_yaml::serialize(temp);
+
+    std::println("{}", std::string_view(output));
   }
 
   return true;

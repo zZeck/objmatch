@@ -6,6 +6,7 @@
             "displayName": "Clang 19.1.4 x86_64-pc-linux-gnu",
             "description": "Using compilers: C = /usr/lib/llvm/19/bin/clang, CXX = /usr/lib/llvm/19/bin/clang++",
             "binaryDir": "${sourceDir}/out/build/${presetName}",
+            "generator": "Ninja",
             "cacheVariables": {
                 "CMAKE_INSTALL_PREFIX": "${sourceDir}/out/install/${presetName}",
                 "CMAKE_C_COMPILER": "/usr/lib/llvm/19/bin/clang",

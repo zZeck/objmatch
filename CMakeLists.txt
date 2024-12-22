@@ -19,11 +19,21 @@ endif()
 
 #this should be limited to clang C++? or does it even matter really
 #add_compile_options(-ftime-trace -ftime-report -Xclang -fno-pch-timestamp)
-add_compile_options(-Xclang -fno-pch-timestamp)
+add_compile_options(-O0 -fno-inline -ggdb3 -Xclang -fno-pch-timestamp -fno-omit-frame-pointer)
+
+option(ENABLE_CLANG_TIDY "Enable clang-tidy code analysis" OFF)
+if(ENABLE_CLANG_TIDY)
+find_program(CLANG_TIDY NAMES clang-tidy)
+if(CLANG_TIDY)
+    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY}")
+else()
+    message(WARNING "clang-tidy not found, code analysis will be disabled.")
+endif()
+endif()
 
 #clang tidy running every build makes them slow
 #set(CMAKE_CXX_CLANG_TIDY clang-tidy)
-#set(CMAKE_CXX_CLANG_TIDY_EXPORT_FIXES_DIR fixes)
+set(CMAKE_CXX_CLANG_TIDY_EXPORT_FIXES_DIR fixes)
 
 project(objmatch CXX ASM)
 

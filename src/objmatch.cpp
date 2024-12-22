@@ -42,14 +42,14 @@ auto readswap16(const std::span<const uint8_t, 2> &buf) -> uint16_t {
 
 auto LoadBinary(const char *binPath) -> binary_info {
   binary_info b_info;
-  std::ifstream file;
-  file.open(binPath, std::ifstream::binary);
+
+  std::ifstream file{binPath, std::ios::binary};
 
   b_info.m_BinarySize = std::filesystem::file_size(binPath);
   b_info.m_Binary = std::vector<uint8_t>(b_info.m_BinarySize);
 
   b_info.m_Binary.reserve(b_info.m_BinarySize);
-  b_info.m_Binary.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+  file.read(reinterpret_cast<char*>(b_info.m_Binary.data()), b_info.m_BinarySize);
 
   const std::filesystem::path fs_path{binPath};
   if ((fs_path.extension() == ".z64" || fs_path.extension() == ".n64" || fs_path.extension() == ".v64") /*&& !m_bOverrideHeaderSize*/) {
@@ -84,94 +84,36 @@ auto LoadBinary(const char *binPath) -> binary_info {
 }
 }
 
-auto ReadStrippedWord(const std::span<const uint8_t, 4> &src, uint64_t relType) -> std::array<uint8_t, 4> {
-  // targ26
-  if (relType == 4) return std::array<uint8_t, 4>{static_cast<uint8_t>(src[0] & 0xFC), 0x00, 0x00, 0x00};
-  // hi/lo16
-  if (relType == 5 || relType == 6) return std::array<uint8_t, 4>{src[0], src[1], 0x00, 0x00};
-  std::array<uint8_t, 4> dst{};
-  std::ranges::copy(src, dst.begin());
-  return dst;
-}
-
 auto TestSymbol(sig_symbol const &symbol, const std::span<const uint8_t> &buffer) -> bool {
   boost::crc_32_type resultA;
   boost::crc_32_type resultB;
 
-  uint32_t crcA = 0;
-  uint32_t crcB = 0;
+  std::vector<uint8_t> func_buf(symbol.size);
+  func_buf.reserve(symbol.size);
+  std::memcpy(func_buf.data(), buffer.data(), symbol.size);
 
-  if (symbol.relocations.empty()) {
-    resultA.process_bytes(buffer.data(), std::min(symbol.size, static_cast<uint64_t>(8)));
-    auto crcA = resultA.checksum();
-
-    if (symbol.crc_8 != crcA) return false;
-
-    resultB.process_bytes(buffer.data(), symbol.size);
-    auto crcB = resultB.checksum();
-
-    return symbol.crc_all == crcB;
-  }
-
-  size_t offset = 0;
-
-  auto reloc_copy = symbol.relocations;
-
-  std::ranges::sort(reloc_copy, [](sig_relocation &a, sig_relocation &b) { return a.offset < b.offset; });
-
-  auto reloc = reloc_copy.begin();
-  uint64_t const crcA_limit = std::min(symbol.size, static_cast<uint64_t>(8));
-
-  // resultA.reset();
-  while (offset < crcA_limit && reloc != reloc_copy.end()) {
-    if (offset < reloc->offset) {
-      // read up to relocated op or crcA_limit
-      // if (buffer.size() < offset) return false;
-      resultA.process_bytes(&buffer[offset], std::min(reloc->offset, crcA_limit) - offset);
-      resultB.process_bytes(&buffer[offset], std::min(reloc->offset, crcA_limit) - offset);
-
-      offset = std::min(reloc->offset, crcA_limit);
-    } else if (offset == reloc->offset) {
-      // strip and read relocated op
-      const std::span<const uint8_t, 4> blah(&buffer[offset], 4);
-      auto op = ReadStrippedWord(blah, reloc->type);
-      resultA.process_bytes(op.data(), 4);
-      resultB.process_bytes(op.data(), 4);
-      offset += 4;
-      reloc++;
+  for (const auto &reloc : symbol.relocations) {
+    const std::span<uint8_t, 4> reloc_in_buf(&func_buf[reloc.offset], 4);
+    if (reloc.type == 4) {
+      //R_MIPS_26
+      reloc_in_buf[0] &= 0xFC;
+      reloc_in_buf[1] = 0x00;
+      reloc_in_buf[2] = 0x00;
+      reloc_in_buf[3] = 0x00;
+    } else if (reloc.type == 5 || reloc.type == 6) {
+      //R_MIPS_HI16 || R_MIPS_LO16
+      reloc_in_buf[2] = 0x00;
+      reloc_in_buf[3] = 0x00;
     }
   }
 
-  if (offset < crcA_limit) {
-    resultA.process_bytes(&buffer[offset], crcA_limit - offset);
-    resultB.process_bytes(&buffer[offset], crcA_limit - offset);
-    offset = crcA_limit;
-  }
-
-  crcA = resultA.checksum();
+  resultA.process_bytes(func_buf.data(), std::min(symbol.size, static_cast<uint64_t>(8)));
+  auto crcA = resultA.checksum();
 
   if (symbol.crc_8 != crcA) return false;
 
-  while (offset < symbol.size && reloc != reloc_copy.end()) {
-    if (offset < reloc->offset) {
-      // read up to relocated op
-      resultB.process_bytes(&buffer[offset], reloc->offset - offset);
-      offset = reloc->offset;
-    } else if (offset == reloc->offset) {
-      // strip and read relocated op
-      const std::span<const uint8_t, 4> blah(&buffer[offset], 4);
-      auto op = ReadStrippedWord(blah, reloc->type);
-      resultB.process_bytes(op.data(), sizeof(op));
-      offset += 4;
-      reloc++;
-    }
-  }
-
-  if (offset < symbol.size) {
-    resultB.process_bytes(&buffer[offset], symbol.size - offset);
-  }
-
-  crcB = resultB.checksum();
+  resultB.process_bytes(func_buf.data(), symbol.size);
+  auto crcB = resultB.checksum();
 
   return symbol.crc_all == crcB;
 }
@@ -203,14 +145,13 @@ auto ObjMatchBloop(const char *binPath, const char *libPath) -> bool {
 
   const std::filesystem::path fs_path{libPath};
   if (fs_path.extension() == ".sig") {
-    std::ifstream file;
-    file.open(libPath, std::ifstream::binary);
+    std::ifstream file {fs_path, std::ios::binary};
   
-    const auto file_size {std::filesystem::file_size(libPath)};
-    std::vector<char> yaml_data;
+    const auto file_size {std::filesystem::file_size(fs_path)};
+    std::vector<char> yaml_data(file_size);
     yaml_data.reserve(file_size);
-  
-    yaml_data.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+
+    file.read(yaml_data.data(), file_size);
 
     auto sigs = sig_yaml::deserialize(yaml_data);
 

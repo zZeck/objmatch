@@ -13,6 +13,14 @@
                 "CMAKE_CXX_COMPILER": "/usr/lib/llvm/19/bin/clang++",
                 "CMAKE_BUILD_TYPE": "Debug"
             }
+        },
+        {
+            "name": "Clang tidy",
+            "displayName": "Clang tidy",
+            "inherits": "Clang 19.1.4 x86_64-pc-linux-gnu",
+            "cacheVariables": {
+                "ENABLE_CLANG_TIDY": "ON"
+            }
         }
     ]
 }

@@ -7,7 +7,7 @@
 
 #include <algorithm>
 #include <bit>
-#include <boost/crc.hpp>
+#include <crc32c/crc32c.h>
 #include <cstring>
 #include <filesystem>
 #include <print>
@@ -281,13 +281,8 @@ auto ProcessLibrary(const char *path) -> std::vector<sig_object> {
         // rather than zeroing out that data out before this executes, in the rel handling.
         // This would avoid mutation of the buffer.
         if (section_data != nullptr && section_data->d_buf != nullptr) {
-          boost::crc_32_type result;
-          result.process_bytes(&section_span[symbol_offset],
-                               std::min(static_cast<uint64_t>(symbol_size), static_cast<uint64_t>(8)));
-          sig_sym.crc_8 = result.checksum();
-          result.reset();
-          result.process_bytes(&section_span[symbol_offset], symbol_size);
-          sig_sym.crc_all = result.checksum();
+          sig_sym.crc_8 = crc32c::Crc32c(&section_span[symbol_offset], std::min(static_cast<uint64_t>(symbol_size), static_cast<uint64_t>(8)));
+          sig_sym.crc_all = crc32c::Crc32c(&section_span[symbol_offset], symbol_size);
         }
 
         symbol_crcs[sig_sym.crc_all] += 1;

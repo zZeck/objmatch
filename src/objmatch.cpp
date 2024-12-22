@@ -4,6 +4,7 @@
 #include <gelf.h>
 #include <libelf.h>
 #include <unistd.h>
+#include <crc32c/crc32c.h>
 
 #include <algorithm>
 #include <bit>
@@ -85,9 +86,6 @@ auto LoadBinary(const char *binPath) -> binary_info {
 }
 
 auto TestSymbol(sig_symbol const &symbol, const std::span<const uint8_t> &buffer) -> bool {
-  boost::crc_32_type resultA;
-  boost::crc_32_type resultB;
-
   std::vector<uint8_t> func_buf(symbol.size);
   func_buf.reserve(symbol.size);
   std::memcpy(func_buf.data(), buffer.data(), symbol.size);
@@ -107,13 +105,11 @@ auto TestSymbol(sig_symbol const &symbol, const std::span<const uint8_t> &buffer
     }
   }
 
-  resultA.process_bytes(func_buf.data(), std::min(symbol.size, static_cast<uint64_t>(8)));
-  auto crcA = resultA.checksum();
+  const auto crcA = crc32c::Crc32c(func_buf.data(), std::min(symbol.size, static_cast<uint64_t>(8)));
 
   if (symbol.crc_8 != crcA) return false;
 
-  resultB.process_bytes(func_buf.data(), symbol.size);
-  auto crcB = resultB.checksum();
+  const auto crcB = crc32c::Crc32c(func_buf.data(), symbol.size);
 
   return symbol.crc_all == crcB;
 }

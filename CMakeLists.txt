@@ -43,6 +43,7 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBELF REQUIRED IMPORTED_TARGET libelf)
 
 find_package(ryml REQUIRED)
+find_package(Crc32c REQUIRED)
 
 add_executable(
 objmatch
@@ -65,8 +66,8 @@ src/yamltrip.cpp
 src/signature.cpp
 )
 
-target_link_libraries(objmatch PRIVATE PkgConfig::LIBELF ryml::ryml)
-target_link_libraries(objsig PRIVATE PkgConfig::LIBELF ryml::ryml)
+target_link_libraries(objmatch PRIVATE PkgConfig::LIBELF ryml::ryml Crc32c::crc32c)
+target_link_libraries(objsig PRIVATE PkgConfig::LIBELF ryml::ryml Crc32c::crc32c)
 target_link_libraries(yamltrip PRIVATE ryml::ryml)
 
 target_precompile_headers(yamltrip PUBLIC

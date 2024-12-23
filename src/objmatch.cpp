@@ -19,6 +19,8 @@
 
 #include "splat_out.h"
 
+std::vector<uint8_t> func_buf{};
+
 namespace {
 auto readswap32(const std::span<const uint8_t, 4> &buf) -> uint32_t {
   uint32_t word{};
@@ -86,22 +88,21 @@ auto LoadBinary(const char *binPath) -> binary_info {
 }
 
 auto TestSymbol(sig_symbol const &symbol, const std::span<const uint8_t> &buffer) -> bool {
-  std::vector<uint8_t> func_buf(symbol.size);
+  func_buf.resize(symbol.size);
   func_buf.reserve(symbol.size);
   std::memcpy(func_buf.data(), buffer.data(), symbol.size);
 
   for (const auto &reloc : symbol.relocations) {
-    const std::span<uint8_t, 4> reloc_in_buf(&func_buf[reloc.offset], 4);
     if (reloc.type == 4) {
       //R_MIPS_26
-      reloc_in_buf[0] &= 0xFC;
-      reloc_in_buf[1] = 0x00;
-      reloc_in_buf[2] = 0x00;
-      reloc_in_buf[3] = 0x00;
+      func_buf[0] &= 0xFC;
+      func_buf[1] = 0x00;
+      func_buf[2] = 0x00;
+      func_buf[3] = 0x00;
     } else if (reloc.type == 5 || reloc.type == 6) {
       //R_MIPS_HI16 || R_MIPS_LO16
-      reloc_in_buf[2] = 0x00;
-      reloc_in_buf[3] = 0x00;
+      func_buf[2] = 0x00;
+      func_buf[3] = 0x00;
     }
   }
 
@@ -265,7 +266,7 @@ auto ProcessSignatureFile(std::vector<sig_object> const &sigFile, binary_info co
 }
 
 auto TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t rom_offset, sig_section const &sig_sec, sig_object const &sig_obj,
-                         std::unordered_map<std::string, sig_obj_sec_sym> sym_map, binary_info const &b_info) -> std::vector<section_guess> {
+                         std::unordered_map<std::string, sig_obj_sec_sym> const &sym_map, binary_info const &b_info) -> std::vector<section_guess> {
   using test_t = struct test_t {
     uint32_t address{};
     sig_relocation relocation{};

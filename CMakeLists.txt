@@ -19,7 +19,8 @@ endif()
 
 #this should be limited to clang C++? or does it even matter really
 #add_compile_options(-ftime-trace -ftime-report -Xclang -fno-pch-timestamp)
-add_compile_options(-O0 -fno-inline -ggdb3 -Xclang -fno-pch-timestamp -fno-omit-frame-pointer)
+#add_compile_options(-O0 -fno-inline -ggdb3 -Xclang -fno-pch-timestamp -fno-omit-frame-pointer)
+add_compile_options(-O3 -g -march=native)
 
 option(ENABLE_CLANG_TIDY "Enable clang-tidy code analysis" OFF)
 if(ENABLE_CLANG_TIDY)

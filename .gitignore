@@ -8,6 +8,9 @@ out
 *.yaml
 *.a
 *.o
+*.z64
+
+
 
 *log
 log*.sig

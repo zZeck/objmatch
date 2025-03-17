@@ -1,3 +1,5 @@
+#pragma once
+
 #include <gelf.h>
 #include <libelf.h>
 

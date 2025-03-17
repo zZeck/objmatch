@@ -54,4 +54,4 @@ auto ProcessSignatureFile(std::vector<sig_object> const &sigFile, binary_info co
     -> std::vector<splat_out>;
 
 auto TestSignatureSymbol(sig_symbol const &sig_sym, uint32_t rom_offset, sig_section const &sig_sec, sig_object const &sig_obj,
-                         std::unordered_map<std::string, sig_obj_sec_sym> sym_map, binary_info const &b_info) -> std::vector<section_guess>;
+                         std::unordered_map<std::string, sig_obj_sec_sym> const &sym_map, binary_info const &b_info) -> std::vector<section_guess>;

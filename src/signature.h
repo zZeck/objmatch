@@ -1,3 +1,5 @@
+#pragma once
+
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -39,6 +41,8 @@ using sig_object = struct sig_object {
   auto operator==(const sig_object &x) const -> bool  = default;
 };
 
+//not all users of these types need serialization
+//should this be moved?
 namespace sig_yaml {
     auto deserialize(std::vector<char> &bytes) -> std::vector<sig_object>;
     auto serialize(const std::vector<sig_object> &sig_obj) -> std::vector<char>;

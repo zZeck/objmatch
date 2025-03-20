@@ -98,4 +98,4 @@ target_link_libraries(matcher_tests PRIVATE PkgConfig::LIBELF Catch2::Catch2With
 include(CTest)
 include(Catch)
 catch_discover_tests(sig_yaml_tests)
-catch_discover_tests(matcher_tests)
+catch_discover_tests(matcher_tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

@@ -61,3 +61,5 @@ enum class obj_ctx_status : std::uint8_t { ok, not_object, no_symtab };
 auto object_processing(Elf *object_file_elf) -> std::tuple<obj_ctx_status, object_context>;
 auto archive_to_section_patterns(int archive_file_descriptor) -> std::vector<section_pattern>;
 auto matcher_main(int argc, const char* argv[]) -> int;
+auto section_compare(const section_pattern &pattern, std::span<uint8_t> data) -> bool;
+auto load(const std::filesystem::path &path) -> std::vector<char>;

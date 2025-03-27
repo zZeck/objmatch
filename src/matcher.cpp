@@ -37,7 +37,7 @@ auto readswap32(const std::span<const uint8_t, 4> &buf) -> uint32_t {
 
   return std::byteswap(word);
 }
-
+}
 
 auto load(const std::filesystem::path &path) -> std::vector<char> {
   auto file_size = std::filesystem::file_size(path);
@@ -48,7 +48,7 @@ auto load(const std::filesystem::path &path) -> std::vector<char> {
   file.read(reinterpret_cast<char*>(file_data.data()), static_cast<int64_t>(file_size));
   return file_data;
 }
-}
+
 
 auto matcher_main(int argc, const char* argv[]) -> int {
   const std::span<const char *> args = {argv, static_cast<size_t>(argc)};
@@ -71,16 +71,12 @@ auto matcher_main(int argc, const char* argv[]) -> int {
 
   close(archive_file_descriptor);
   
-
-
-
   //////////////////////
 
   for(auto entry : yaml) {
     if(entry.start > 0) {
       std::println("{:x}", rom[entry.start]);
 
-      
     }
   }
   return 0;
@@ -221,7 +217,8 @@ auto archive_to_section_patterns(int archive_file_descriptor) -> std::vector<sec
 
       section_pattern sec_pat {
         .object = std::string(obj_ctx.object_name),
-        .section = std::string(section_ctx.section_name)
+        .section = std::string(section_ctx.section_name),
+        .size = section_ctx.section_data->d_size
       };
 
       uint32_t lastHi16Addend = 0;
@@ -317,34 +314,34 @@ auto archive_to_section_patterns(int archive_file_descriptor) -> std::vector<sec
   return section_patterns;
 }
 
-namespace {
-std::vector<uint8_t> func_buf{};
+std::vector<uint8_t> data_buf{};
 
-auto TestSymbol(sig_symbol const &symbol, const std::span<const uint8_t> &buffer) -> bool {
-  func_buf.resize(symbol.size);
-  func_buf.reserve(symbol.size);
-  std::memcpy(func_buf.data(), buffer.data(), symbol.size);
+auto section_compare(const section_pattern &pattern, std::span<uint8_t> data) -> bool {
+  if (pattern.size != data.size()) return false;
 
-  for (const auto &reloc : symbol.relocations) {
+  data_buf.resize(pattern.size);
+  data_buf.reserve(pattern.size);
+  std::ranges::copy(data, data_buf.begin());
+
+  for (const auto &reloc : pattern.relocations) {
     if (reloc.type == 4) {
       //R_MIPS_26
-      func_buf[0] &= 0xFC;
-      func_buf[1] = 0x00;
-      func_buf[2] = 0x00;
-      func_buf[3] = 0x00;
+      data_buf[reloc.offset + 0] &= 0xFC;
+      data_buf[reloc.offset + 1] = 0x00;
+      data_buf[reloc.offset + 2] = 0x00;
+      data_buf[reloc.offset + 3] = 0x00;
     } else if (reloc.type == 5 || reloc.type == 6) {
       //R_MIPS_HI16 || R_MIPS_LO16
-      func_buf[2] = 0x00;
-      func_buf[3] = 0x00;
+      data_buf[reloc.offset + 2] = 0x00;
+      data_buf[reloc.offset + 3] = 0x00;
     }
   }
 
-  const auto crcA = crc32c::Crc32c(func_buf.data(), std::min(symbol.size, static_cast<uint64_t>(8)));
+  const auto crcA = crc32c::Crc32c(data_buf.data(), std::min(pattern.size, static_cast<uint64_t>(8)));
 
-  if (symbol.crc_8 != crcA) return false;
+  if (pattern.crc_8 != crcA) return false;
 
-  const auto crcB = crc32c::Crc32c(func_buf.data(), symbol.size);
+  const auto crcB = crc32c::Crc32c(data_buf.data(), pattern.size);
 
-  return symbol.crc_all == crcB;
-}
+  return pattern.crc_all == crcB;
 }

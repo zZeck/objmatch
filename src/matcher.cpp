@@ -49,39 +49,34 @@ auto load(const std::filesystem::path &path) -> std::vector<char> {
   return file_data;
 }
 
-
-auto matcher_main(int argc, const char* argv[]) -> int {
-  const std::span<const char *> args = {argv, static_cast<size_t>(argc)};
-
-  auto file_path = std::filesystem::path {args[1]};
-
-  auto yaml_data = load(file_path);
-  auto yaml = splat_yaml::deserialize(yaml_data);
-
-  auto rom_path = std::filesystem::path {args[2]};
-  auto rom = load(rom_path);
-
-  auto archive_path = std::filesystem::path {args[3]};
-  auto archive_file_descriptor = open(archive_path.c_str(), O_RDONLY | O_CLOEXEC);
-
-  // move to main or static?
+auto matcher(const std::vector<splat_out> &yaml, const std::vector<char> &rom, int archive_file_descriptor, std::string prefix) -> std::vector<splat_out> {
   if (elf_version(EV_CURRENT) == EV_NONE) std::print("version out of date");
 
   auto sec_patterns = archive_to_section_patterns(archive_file_descriptor);
 
-  close(archive_file_descriptor);
-  
-  //////////////////////
+  std::vector<splat_out> output{};
+  for(const auto &entry : yaml) {
+    for (const auto &pattern : sec_patterns) {
+      auto data = std::span<const uint8_t>(reinterpret_cast<const uint8_t *>(&rom[entry.start]), std::min(static_cast<uint64_t>(rom.size()), static_cast<uint64_t>(pattern.size)));
+      auto matched = section_compare(pattern, data);
+      if (matched) {
+        auto obj_name = std::filesystem::path {pattern.object};
+        auto type = std::string{pattern.section == ".text" ? "c" : "bin"};
 
-  for(auto entry : yaml) {
-    if(entry.start > 0) {
-      std::println("{:x}", rom[entry.start]);
 
+        output.push_back(splat_out{
+          .start = entry.start,
+          .vram = entry.vram,
+          .type = type,
+          .name = prefix + std::string{obj_name.stem()}
+        });
+        break;
+      }
     }
   }
-  return 0;
-}
 
+  return output;
+}
 
 auto object_processing(Elf *object_file_elf) -> std::tuple<obj_ctx_status, object_context> {
   object_context obj_ctx{};
@@ -316,7 +311,7 @@ auto archive_to_section_patterns(int archive_file_descriptor) -> std::vector<sec
 
 std::vector<uint8_t> data_buf{};
 
-auto section_compare(const section_pattern &pattern, std::span<uint8_t> data) -> bool {
+auto section_compare(const section_pattern &pattern, std::span<const uint8_t> data) -> bool {
   if (pattern.size != data.size()) return false;
 
   data_buf.resize(pattern.size);

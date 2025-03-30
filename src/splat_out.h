@@ -9,6 +9,8 @@ using splat_out = struct splat_out {
   uint64_t vram{};
   std::string type;
   std::string name;
+
+  auto operator==(const splat_out &x) const -> bool  = default;
 };
 
 namespace splat_yaml {

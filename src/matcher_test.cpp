@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <vector>
 #include "signature.h"
+#include "splat_out.h"
 
 #include "matcher.h"
 #include <libelf.h>
@@ -141,4 +142,91 @@ TEST_CASE("find_section_in_bin", "[matcher]") {
   REQUIRE(match);
 }
 
+TEST_CASE("matcher", "[matcher]") {
+  auto start = std::filesystem::path {"src/object_test_src/out/start"};
+  auto start_descriptor = open(start.c_str(), O_RDONLY | O_CLOEXEC);
+  auto start_bin = std::filesystem::path {"src/object_test_src/out/start.bin"};
+  auto archive_path = std::filesystem::path {"src/object_test_src/out/libexample.a"};
+  auto archive_file_descriptor = open(archive_path.c_str(), O_RDONLY | O_CLOEXEC);
 
+  // does catch2 have a place for global initialization?
+  if (elf_version(EV_CURRENT) == EV_NONE) std::print("version out of date");
+
+  auto sig_library = std::vector<sig_object>();
+
+  Elf_Cmd elf_command = ELF_C_READ;
+  //auto object_file_elf = elf_begin(archive_file_descriptor, elf_command, archive_elf); 
+  //auto [obj_status, sig_obj, obj_ctx] = object_processing(object_file_elf);
+
+  Elf_Scn *symtab_section{};
+  GElf_Shdr symtab_header;
+  GElf_Shdr lowest_alloc_section {
+    .sh_addr = std::numeric_limits<Elf64_Addr>::max()
+  };
+  auto start_elf = elf_begin(start_descriptor, ELF_C_READ, nullptr);  // null check
+  size_t section_header_string_table_index{};
+  elf_getshdrstrndx(start_elf, &section_header_string_table_index);  // must return 0 for success
+
+  Elf_Scn *section{};
+  while ((section = elf_nextscn(start_elf, section)) != nullptr) {
+    // gelf functions need allocated space to copy to
+    GElf_Shdr section_header;
+    gelf_getshdr(section, &section_header);  // error if not returns &section_header?
+
+    auto section_name = elf_strptr(start_elf, section_header_string_table_index, section_header.sh_name);
+
+    if (strcmp(section_name, ".symtab") == 0) {
+      symtab_section = section;
+      symtab_header = section_header;
+    }
+
+    if (section_header.sh_flags & SHF_ALLOC && section_header.sh_addr < lowest_alloc_section.sh_addr) {
+      lowest_alloc_section = section_header;
+    }
+  }
+
+  auto symbol_count = symtab_header.sh_size / symtab_header.sh_entsize; 
+  auto symbol_data = elf_getdata(symtab_section, nullptr);
+
+  GElf_Sym libelf_symbol;
+  for (int nSymbol = 0; nSymbol < symbol_count; nSymbol++) {
+    gelf_getsym(symbol_data, nSymbol, &libelf_symbol); //err check
+
+    auto symbol_name = elf_strptr(start_elf, symtab_header.sh_link, libelf_symbol.st_name);
+
+    if (strcmp(symbol_name, "example") == 0) {
+      break;
+    }
+  }
+
+  auto offset_in_bin = libelf_symbol.st_value - lowest_alloc_section.sh_addr;
+
+  auto start_bin_data = load(start_bin);
+
+  auto prefix = std::string{"some/path/"};
+
+  std::vector<splat_out> yaml {
+    splat_out {
+      .start = offset_in_bin,
+      .vram = 0,
+      .type = "bin",
+      .name = "random"
+    }
+  };
+
+  auto result = matcher(yaml, start_bin_data, archive_file_descriptor, prefix);
+
+  close(start_descriptor);
+  close(archive_file_descriptor);
+
+  std::vector<splat_out> expected {
+    splat_out {
+      .start = offset_in_bin,
+      .vram = 0,
+      .type = "c",
+      .name = prefix + "example"
+    }
+  };
+
+  REQUIRE(result == expected);
+}

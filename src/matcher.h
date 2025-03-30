@@ -19,6 +19,7 @@
 #include <unordered_map>
 #include <unistd.h>
 #include "signature.h"
+#include "splat_out.h"
 
 using section_relocations = struct {
   Elf_Scn *section;
@@ -60,6 +61,6 @@ enum class obj_ctx_status : std::uint8_t { ok, not_object, no_symtab };
 
 auto object_processing(Elf *object_file_elf) -> std::tuple<obj_ctx_status, object_context>;
 auto archive_to_section_patterns(int archive_file_descriptor) -> std::vector<section_pattern>;
-auto matcher_main(int argc, const char* argv[]) -> int;
-auto section_compare(const section_pattern &pattern, std::span<uint8_t> data) -> bool;
+auto section_compare(const section_pattern &pattern, std::span<const uint8_t> data) -> bool;
 auto load(const std::filesystem::path &path) -> std::vector<char>;
+auto matcher(const std::vector<splat_out> &splat, const std::vector<char> &rom, int archive_file_descriptor, std::string prefix) -> std::vector<splat_out>;

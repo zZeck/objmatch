@@ -331,9 +331,8 @@ TEST_CASE("matcher duplicate sections", "[matcher]") {
   GElf_Sym libelf_symbol;
   Elf64_Addr text_offset{};
   Elf64_Xword text_size{};
-  Elf64_Addr data_offset{};
-  Elf64_Addr rodata_offset{};
-  Elf64_Xword rodata_size{};
+  Elf64_Addr copy_text_offset{};
+  Elf64_Xword copy_text_size{};
   for (int nSymbol = 0; nSymbol < symbol_count; nSymbol++) {
     gelf_getsym(symbol_data, nSymbol, &libelf_symbol); //err check
 
@@ -342,12 +341,10 @@ TEST_CASE("matcher duplicate sections", "[matcher]") {
     if (strcmp(symbol_name, "example") == 0) {
       text_offset = libelf_symbol.st_value - lowest_alloc_section.sh_addr;
       text_size = libelf_symbol.st_size;
-    } else if (strcmp(symbol_name, "number0") == 0) {
-      data_offset = libelf_symbol.st_value - lowest_alloc_section.sh_addr;
-    } else if (strcmp(symbol_name, "number1") == 0) {
-      rodata_offset = libelf_symbol.st_value - lowest_alloc_section.sh_addr;
-      rodata_size = libelf_symbol.st_size;
-    } 
+    } else if (strcmp(symbol_name, "example2") == 0) {
+      copy_text_offset = libelf_symbol.st_value - lowest_alloc_section.sh_addr;
+      copy_text_size = libelf_symbol.st_size;
+    }
   }
 
   auto start_bin_data = load(start_bin);
@@ -361,17 +358,7 @@ TEST_CASE("matcher duplicate sections", "[matcher]") {
       .type = "bin",
       .name = "random"
     }, splat_out {
-      .start = data_offset,
-      .vram = 0,
-      .type = "bin",
-      .name = "random"
-    }, splat_out {
-      .start = rodata_offset,
-      .vram = 0,
-      .type = "bin",
-      .name = "random"
-    }, splat_out {
-      .start = rodata_offset + rodata_size + 5,
+      .start = copy_text_offset,
       .vram = 0,
       .type = "bin",
       .name = "random"
@@ -383,9 +370,7 @@ TEST_CASE("matcher duplicate sections", "[matcher]") {
   close(start_descriptor);
   close(archive_file_descriptor);
 
-  std::vector<splat_out> expected {};
-
-  REQUIRE(result == expected);
+  REQUIRE(result == yaml);
 }
 
 TEST_CASE("matcher2", "[matcher]") {

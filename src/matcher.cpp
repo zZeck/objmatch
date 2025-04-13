@@ -61,6 +61,9 @@ auto matcher(const std::vector<splat_out> &yaml, const std::vector<char> &rom, i
     return crc_cmp < 0;
   });
 
+  //this needs a test and fix, it's bugged
+  //needs to remove any and ALL non-unique elements, not filter to a now unique list, leaving 1 representative element behind
+  //for any that had duplicates
   const auto [first, last] = std::ranges::unique(sec_patterns,
     [](section_pattern const &a, section_pattern const &b) { return a.crc_all == b.crc_all; });
 
@@ -88,15 +91,31 @@ auto matcher(const std::vector<splat_out> &yaml, const std::vector<char> &rom, i
     }
   }
 
+  //problem: sometimes the same pattern matches multiple places in the yaml
+  std::ranges::sort(matched_patterns, [](start_pattern const &a, start_pattern const &b) {
+    auto crc_cmp = a.pattern.crc_all <=> b.pattern.crc_all;
+    return crc_cmp < 0;
+  });
+
+  //group_by might be better, but that isn't compiling, and in this case the logical outcome is the same as chunk_by
+  //the type for this is terrifying, and I can't get std::ranges::to<std::vector> to work
+  //nor can I understand the error messages
+  auto patterns_unique_only = matched_patterns
+    | std::views::chunk_by([](start_pattern const &a, start_pattern const &b) {
+      return a.pattern.crc_all == b.pattern.crc_all;
+    })
+    | std::views::filter(([](auto r) { return std::ranges::size(r) == 1; }) )
+    | std::views::join;
+
   std::vector<splat_out> output{};
   for(auto i = 0; i < yaml.size(); i+=1) {
     const auto &entry = yaml[i];
 
-    auto maybe_pattern = std::ranges::find_if(matched_patterns, [entry](const auto &pattern_match) {
+    auto maybe_pattern = std::ranges::find_if(patterns_unique_only, [entry](const auto &pattern_match) {
       return entry.start == pattern_match.start;
     });
 
-    if (maybe_pattern != matched_patterns.end()) {
+    if (maybe_pattern != patterns_unique_only.end()) {
       const auto &pattern = maybe_pattern->pattern;
       auto obj_name = std::filesystem::path {pattern.object};
       auto type = std::string{
@@ -136,22 +155,6 @@ auto matcher(const std::vector<splat_out> &yaml, const std::vector<char> &rom, i
         output.push_back(copy);
     }
   }
-
-
-
-  //problem: sometimes the same pattern matches multiple places in the yaml
-  //std::ranges::sort(sec_patterns, [](section_pattern const &a, section_pattern const &b) {
-  //  auto size_cmp = a.size <=> b.size;
-  //  if (size_cmp != 0) return size_cmp < 0;
-  //  auto crc_cmp = a.crc_all <=> b.crc_all;
-  //  return crc_cmp < 0;
-  //});
-//
-  //const auto [first, last] = std::ranges::unique(sec_patterns,
-  //  [](section_pattern const &a, section_pattern const &b) { return a.crc_all == b.crc_all; });
-//
-  //sec_patterns.erase(first, last);
-
 
   return output;
 }

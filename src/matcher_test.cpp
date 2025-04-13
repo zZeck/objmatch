@@ -62,7 +62,21 @@ TEST_CASE("archive_to_section_patterns", "[matcher]") {
   REQUIRE(temp0[1].object == std::string{"example.o"});
   REQUIRE(temp0[1].section == std::string{".data"});
   REQUIRE(temp0[2].object == std::string{"example.o"});
-  REQUIRE(temp0[2].section == std::string{".bss"});
+  REQUIRE(temp0[2].section == std::string{".rodata"});
+}
+
+TEST_CASE("no_dup_archive_to_section_patterns", "[matcher]") {
+  auto archive_path = std::filesystem::path {"src/object_test_src/out/libcopyexample.a"};
+  auto archive_file_descriptor = open(archive_path.c_str(), O_RDONLY | O_CLOEXEC);
+
+  // does catch2 have a place for global initialization?
+  if (elf_version(EV_CURRENT) == EV_NONE) std::print("version out of date");
+
+  auto temp0 = no_dup_archive_to_section_patterns(archive_file_descriptor);
+
+  close(archive_file_descriptor);
+
+  REQUIRE(temp0.size() == 0);
 }
 
 TEST_CASE("find_section_in_bin", "[matcher]") {

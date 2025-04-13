@@ -52,22 +52,7 @@ auto load(const std::filesystem::path &path) -> std::vector<char> {
 auto matcher(const std::vector<splat_out> &yaml, const std::vector<char> &rom, int archive_file_descriptor, std::string prefix) -> std::vector<splat_out> {
   if(elf_version(EV_CURRENT) == EV_NONE) std::print("version out of date");
 
-  auto sec_patterns = archive_to_section_patterns(archive_file_descriptor);
-
-  std::ranges::sort(sec_patterns, [](section_pattern const &a, section_pattern const &b) {
-    auto size_cmp = a.size <=> b.size;
-    if (size_cmp != 0) return size_cmp < 0;
-    auto crc_cmp = a.crc_all <=> b.crc_all;
-    return crc_cmp < 0;
-  });
-
-  //this needs a test and fix, it's bugged
-  //needs to remove any and ALL non-unique elements, not filter to a now unique list, leaving 1 representative element behind
-  //for any that had duplicates
-  const auto [first, last] = std::ranges::unique(sec_patterns,
-    [](section_pattern const &a, section_pattern const &b) { return a.crc_all == b.crc_all; });
-
-  sec_patterns.erase(first, last);
+  auto sec_patterns = no_dup_archive_to_section_patterns(archive_file_descriptor);
 
   using start_pattern = struct start_pattern {
     uint64_t start {};
@@ -262,6 +247,39 @@ auto object_processing(Elf *object_file_elf) -> std::tuple<obj_ctx_status, objec
   obj_ctx.xndxdata = xndxdata;
 
   return std::make_tuple(obj_ctx_status::ok, obj_ctx);
+}
+
+auto no_dup_archive_to_section_patterns(int archive_file_descriptor) -> std::vector<section_pattern> {
+  auto sec_patterns = archive_to_section_patterns(archive_file_descriptor);
+
+  std::ranges::sort(sec_patterns, [](section_pattern const &a, section_pattern const &b) {
+    auto size_cmp = a.size <=> b.size;
+    if (size_cmp != 0) return size_cmp < 0;
+    auto crc_cmp = a.crc_all <=> b.crc_all;
+    return crc_cmp < 0;
+  });
+
+  std::ranges::sort(sec_patterns, [](section_pattern const &a, section_pattern const &b) {
+    auto crc_cmp = a.crc_all <=> b.crc_all;
+    return crc_cmp < 0;
+  });
+
+  //group_by might be better, but that isn't compiling, and in this case the logical outcome is the same as chunk_by
+  //the type for this is terrifying, and I can't get std::ranges::to<std::vector> to work
+  //nor can I understand the error messages
+  auto patterns_unique_only = sec_patterns
+    | std::views::chunk_by([](section_pattern const &a, section_pattern const &b) {
+      return a.crc_all == b.crc_all;
+    })
+    | std::views::filter(([](auto r) { return std::ranges::size(r) == 1; }) )
+    | std::views::join;
+
+  std::vector<section_pattern> output{};
+  for(const auto &entry : patterns_unique_only) {
+    output.push_back((entry));
+  }
+
+  return output;
 }
 
 auto archive_to_section_patterns(int archive_file_descriptor) -> std::vector<section_pattern> {

@@ -20,7 +20,7 @@ endif()
 #this should be limited to clang C++? or does it even matter really
 #add_compile_options(-ftime-trace -ftime-report -Xclang -fno-pch-timestamp)
 #add_compile_options(-O0 -fno-inline -ggdb3 -Xclang -fno-pch-timestamp -fno-omit-frame-pointer)
-add_compile_options(-O0 -g -march=native)
+add_compile_options(-O2 -g -march=native)
 
 option(ENABLE_CLANG_TIDY "Enable clang-tidy code analysis" OFF)
 if(ENABLE_CLANG_TIDY)
@@ -66,6 +66,7 @@ matcher
 src/matcher_main.cpp
 src/matcher.cpp
 src/splat_out.cpp
+src/section_pattern.cpp
 )
 
 add_executable(
@@ -90,8 +91,8 @@ target_precompile_headers(yamltrip PUBLIC
 find_package(Catch2 3 REQUIRED)
 
 # These tests can use the Catch2-provided main
-add_executable(sig_yaml_tests src/yaml_test.cpp src/signature.cpp)
-add_executable(matcher_tests src/matcher_test.cpp src/matcher.cpp src/splat_out.cpp src/signature.cpp)
+add_executable(sig_yaml_tests src/yaml_test.cpp src/signature.cpp src/section_pattern.cpp)
+add_executable(matcher_tests src/matcher_test.cpp src/matcher.cpp src/splat_out.cpp src/signature.cpp src/section_pattern.cpp)
 target_link_libraries(sig_yaml_tests PRIVATE Catch2::Catch2WithMain ryml::ryml)
 target_link_libraries(matcher_tests PRIVATE PkgConfig::LIBELF Catch2::Catch2WithMain ryml::ryml Crc32c::crc32c)
 

@@ -1,2 +1,5 @@
 CompileFlags:
   CompilationDatabase: out/build/Clang 19.1.4 x86_64-pc-linux-gnu
+InlayHints:
+  DeducedTypes: No
+  Designators: No

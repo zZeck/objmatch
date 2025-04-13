@@ -16,12 +16,12 @@
 #include <vector>
 #include <gelf.h>
 #include <libelf.h>
-#include <unordered_map>
 #include <unistd.h>
 
 #include "splat_out.h"
 #include "signature.h"
 #include "matcher.h"
+
 
 namespace {
 template<typename T>
@@ -50,41 +50,147 @@ auto load(const std::filesystem::path &path) -> std::vector<char> {
 }
 
 auto matcher(const std::vector<splat_out> &yaml, const std::vector<char> &rom, int archive_file_descriptor, std::string prefix) -> std::vector<splat_out> {
+  if(elf_version(EV_CURRENT) == EV_NONE) std::print("version out of date");
+
+  auto sec_patterns = archive_to_section_patterns(archive_file_descriptor);
+
+  std::ranges::sort(sec_patterns, [](section_pattern const &a, section_pattern const &b) {
+    auto size_cmp = a.size <=> b.size;
+    if (size_cmp != 0) return size_cmp < 0;
+    auto crc_cmp = a.crc_all <=> b.crc_all;
+    return crc_cmp < 0;
+  });
+
+  const auto [first, last] = std::ranges::unique(sec_patterns,
+    [](section_pattern const &a, section_pattern const &b) { return a.crc_all == b.crc_all; });
+
+  sec_patterns.erase(first, last);
+
+  using start_pattern = struct start_pattern {
+    uint64_t start {};
+    section_pattern pattern {};
+  };
+
+  std::vector<start_pattern> matched_patterns{};
+  for(auto entry : yaml) {
+    auto maybe_pattern = std::ranges::find_if(sec_patterns, [entry, rom](const auto &pattern) {
+      auto data = std::span<const uint8_t>(reinterpret_cast<const uint8_t *>(&rom[entry.start]), std::min(static_cast<uint64_t>(rom.size()), static_cast<uint64_t>(pattern.size)));
+      return section_compare(pattern, data);
+    });
+
+    if (maybe_pattern != sec_patterns.end()) {
+      const auto &pattern = *maybe_pattern;
+
+      matched_patterns.push_back(start_pattern{
+        .start = entry.start,
+        .pattern = pattern
+      });
+    }
+  }
+
+  std::vector<splat_out> output{};
+  for(auto i = 0; i < yaml.size(); i+=1) {
+    const auto &entry = yaml[i];
+
+    auto maybe_pattern = std::ranges::find_if(matched_patterns, [entry](const auto &pattern_match) {
+      return entry.start == pattern_match.start;
+    });
+
+    if (maybe_pattern != matched_patterns.end()) {
+      const auto &pattern = maybe_pattern->pattern;
+      auto obj_name = std::filesystem::path {pattern.object};
+      auto type = std::string{
+        pattern.section == ".text" ? "c" :
+        pattern.section == ".data" ? ".data" :
+        pattern.section == ".rodata" ? ".rodata" :
+        "bin"};
+
+      output.push_back(splat_out{
+        .start = entry.start,
+        .vram = entry.vram,
+        .type = type,
+        .name = prefix + std::string{obj_name.stem()}
+      });
+
+      if(i+1 < yaml.size()) {
+        const auto &next_entry = yaml[i + 1];
+        if(next_entry.start > entry.start + pattern.size) {
+          output.push_back(splat_out{
+            .start = entry.start + pattern.size,
+            .vram = entry.vram,
+            .type = "bin",
+            .name = std::format("bin_0x{:x}", entry.start + pattern.size)
+          });
+        } else if (next_entry.start < entry.start + pattern.size) {
+          //error should be collected somehow, easier to test
+          std::println(stderr, "Pattern {} {} matched at 0x{:x} is too large", pattern.object, pattern.section, entry.start);
+        }
+      } else output.push_back(splat_out{
+        .start = entry.start + pattern.size,
+        .vram = entry.vram,
+        .type = "bin",
+        .name = std::format("bin_0x{:x}", entry.start + pattern.size)
+      });
+    } else {
+        auto copy = entry;
+        output.push_back(copy);
+    }
+  }
+
+
+
+  //problem: sometimes the same pattern matches multiple places in the yaml
+  //std::ranges::sort(sec_patterns, [](section_pattern const &a, section_pattern const &b) {
+  //  auto size_cmp = a.size <=> b.size;
+  //  if (size_cmp != 0) return size_cmp < 0;
+  //  auto crc_cmp = a.crc_all <=> b.crc_all;
+  //  return crc_cmp < 0;
+  //});
+//
+  //const auto [first, last] = std::ranges::unique(sec_patterns,
+  //  [](section_pattern const &a, section_pattern const &b) { return a.crc_all == b.crc_all; });
+//
+  //sec_patterns.erase(first, last);
+
+
+  return output;
+}
+
+auto analyze(int archive_file_descriptor) -> void {
   if (elf_version(EV_CURRENT) == EV_NONE) std::print("version out of date");
 
   auto sec_patterns = archive_to_section_patterns(archive_file_descriptor);
 
-  std::vector<splat_out> output{};
-  for(const auto &entry : yaml) {
-    for (const auto &pattern : sec_patterns) {
-      auto data = std::span<const uint8_t>(reinterpret_cast<const uint8_t *>(&rom[entry.start]), std::min(static_cast<uint64_t>(rom.size()), static_cast<uint64_t>(pattern.size)));
-      auto matched = section_compare(pattern, data);
-      if (matched) {
-        auto obj_name = std::filesystem::path {pattern.object};
-        auto type = std::string{pattern.section == ".text" ? "c" : "bin"};
+  std::ranges::sort(sec_patterns, [](section_pattern const &a, section_pattern const &b) {
+    auto size_cmp = a.size <=> b.size;
+    if (size_cmp != 0) return size_cmp < 0;
+    auto crc_cmp = a.crc_all <=> b.crc_all;
+    return crc_cmp < 0;
+  });
+
+  //auto view1 = sec_patterns | std::views::chunk_by([](const section_pattern &x, const section_pattern &y) {
+  //  return x.crc_all == y.crc_all;
+  //});
+
+  const auto [first, last] = std::ranges::unique(sec_patterns,
+    [](section_pattern const &a, section_pattern const &b) { return a.crc_all == b.crc_all; });
+
+  sec_patterns.erase(first, last);
 
 
-        output.push_back(splat_out{
-          .start = entry.start,
-          .vram = entry.vram,
-          .type = type,
-          .name = prefix + std::string{obj_name.stem()}
-        });
-        break;
-      }
-    }
-  }
+  std::println("{}", std::string_view{pattern_yaml::serialize(sec_patterns)});
 
-  return output;
+  return;
 }
+
 
 auto object_processing(Elf *object_file_elf) -> std::tuple<obj_ctx_status, object_context> {
   object_context obj_ctx{};
   auto archive_header = elf_getarhdr(object_file_elf);  // null check?
 
   obj_ctx.object_name = archive_header->ar_name;
-  std::println("{}", archive_header->ar_name);
   const std::filesystem::path object_path{archive_header->ar_name};
+  // done to ignore / and //, hopefully nothing else. Perhaps they should be ignored directly rather than looking for ! .o
   if (object_path.extension() != ".o") return std::make_tuple(obj_ctx_status::not_object, object_context{});
 
   size_t section_header_string_table_index = 0;
@@ -175,6 +281,7 @@ auto archive_to_section_patterns(int archive_file_descriptor) -> std::vector<sec
 
     for (auto sec_rec : obj_ctx.sections) {
       using section_context = struct {
+        GElf_Shdr section_header;
         char *section_name;
         size_t section_index;
         Elf_Data *section_data;
@@ -201,6 +308,7 @@ auto archive_to_section_patterns(int archive_file_descriptor) -> std::vector<sec
         return std::make_tuple(
           sig_section { .size = section_header.sh_size, .name = std::string(section_name)},
           section_context {
+            .section_header = section_header,
             .section_name = section_name,
             .section_index = section_index,
             .section_data = section_data,
@@ -209,6 +317,11 @@ auto archive_to_section_patterns(int archive_file_descriptor) -> std::vector<sec
             .rel_entry_count = rel_entry_count
           });
       })();
+
+      // filter out no size
+      if (section_ctx.section_data->d_size == 0) continue;
+      // filter NOBITS like bss
+      if (section_ctx.section_header.sh_type == SHT_NOBITS) continue;
 
       section_pattern sec_pat {
         .object = std::string(obj_ctx.object_name),

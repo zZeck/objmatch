@@ -1,7 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
+#include <print>
 #include <vector>
-
+#include <string_view>
 #include "signature.h"
+#include "section_pattern.h"
 
 TEST_CASE("Deserialize yaml", "[yaml]") {
   std::string yaml{
@@ -78,3 +80,35 @@ TEST_CASE("Serialize yaml", "[yaml]") {
 
   REQUIRE(result == yaml_bytes);
 }
+
+TEST_CASE("Serialize section_pattern yaml", "[yaml]") {
+  std::vector<section_pattern> section_patterns{section_pattern{
+    .object{"someobj"},
+    .section{"section"},
+    .size{0xFF},
+    .crc_8{0x1},
+    .crc_all{0x2},
+    .relocations{{
+      sec_relocation{
+        .type{},
+        .offset{},
+        .addend{},
+      }
+    }}
+  }};
+
+  auto result = pattern_yaml::serialize(section_patterns);
+
+  std::string yaml{
+      "- object: someobj\n"
+      "  section: section\n"
+      "  size: 0xff\n"
+      "  crc_8: 0x1\n"
+      "  crc_all: 0x2\n"
+  };
+  std::vector<char> yaml_bytes{yaml.begin(), yaml.end()};
+
+  REQUIRE(result == yaml_bytes);
+}
+
+

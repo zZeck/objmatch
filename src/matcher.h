@@ -20,6 +20,7 @@
 #include <unistd.h>
 #include "signature.h"
 #include "splat_out.h"
+#include "section_pattern.h"
 
 using section_relocations = struct {
   Elf_Scn *section;
@@ -37,25 +38,8 @@ using object_context = struct {
   Elf_Data *xndxdata;
 };
 
-using sec_relocation = struct sec_relocation {
-  uint64_t type{};
-  uint64_t offset{};
-  uint32_t addend{};
-
-  auto operator==(const sec_relocation &x) const -> bool  = default;
-};
 
 
-using section_pattern = struct section_pattern {
-  std::string object;
-  std::string section;
-  uint64_t size{};
-  uint32_t crc_8{};
-  uint32_t crc_all{};
-  std::vector<sec_relocation> relocations;
-
-  auto operator==(const section_pattern &x) const -> bool  = default;
-};
 
 enum class obj_ctx_status : std::uint8_t { ok, not_object, no_symtab };
 
@@ -64,3 +48,4 @@ auto archive_to_section_patterns(int archive_file_descriptor) -> std::vector<sec
 auto section_compare(const section_pattern &pattern, std::span<const uint8_t> data) -> bool;
 auto load(const std::filesystem::path &path) -> std::vector<char>;
 auto matcher(const std::vector<splat_out> &splat, const std::vector<char> &rom, int archive_file_descriptor, std::string prefix) -> std::vector<splat_out>;
+auto analyze(int archive_file_descriptor) -> void;

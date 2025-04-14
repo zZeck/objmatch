@@ -207,6 +207,7 @@ TEST_CASE("matcher", "[matcher]") {
   Elf64_Addr text_offset{};
   Elf64_Xword text_size{};
   Elf64_Addr data_offset{};
+  Elf64_Addr data_size{};
   Elf64_Addr rodata_offset{};
   Elf64_Xword rodata_size{};
   for (int nSymbol = 0; nSymbol < symbol_count; nSymbol++) {
@@ -214,20 +215,26 @@ TEST_CASE("matcher", "[matcher]") {
 
     auto symbol_name = elf_strptr(start_elf, symtab_header.sh_link, libelf_symbol.st_name);
 
+    auto offset = libelf_symbol.st_value - lowest_alloc_section.sh_addr;
+    auto size = libelf_symbol.st_size;
     if (strcmp(symbol_name, "example") == 0) {
-      text_offset = libelf_symbol.st_value - lowest_alloc_section.sh_addr;
-      text_size = libelf_symbol.st_size;
+      text_offset = offset;
+      text_size = size;
     } else if (strcmp(symbol_name, "number0") == 0) {
-      data_offset = libelf_symbol.st_value - lowest_alloc_section.sh_addr;
+      data_offset = offset;
+      data_size = size;
     } else if (strcmp(symbol_name, "number1") == 0) {
-      rodata_offset = libelf_symbol.st_value - lowest_alloc_section.sh_addr;
-      rodata_size = libelf_symbol.st_size;
-    } 
+      rodata_offset = offset;
+      rodata_size = size;
+    }
   }
 
   auto start_bin_data = load(start_bin);
 
-  auto prefix = std::string{"some/path/"};
+  auto paths = std::vector{file_path {
+    .file {"example.o"},
+    .path {"examplepath"}
+  }};
 
   std::vector<splat_out> yaml {
     splat_out {
@@ -253,35 +260,37 @@ TEST_CASE("matcher", "[matcher]") {
     }
   };
 
-  auto result = matcher(yaml, start_bin_data, archive_file_descriptor, prefix);
+  auto result = matcher(yaml, start_bin_data, archive_file_descriptor, paths, "prefix/");
 
   close(start_descriptor);
   close(archive_file_descriptor);
 
+  // vram of generated bin sections should start at the end of the matched section
+  // passed in data has all vram 0 so the expected result looks a bit strange
   std::vector<splat_out> expected {
     splat_out {
       .start = text_offset,
       .vram = 0,
       .type = "c",
-      .name = prefix + "example"
+      .name = "prefix/examplepath/example"
     }, splat_out {
       .start = text_offset + text_size,
-      .vram = 0,
+      .vram = text_size,
       .type = "bin",
       .name = std::format("bin_0x{:x}", text_offset + text_size)
     },  splat_out {
       .start = data_offset,
       .vram = 0,
       .type = ".data",
-      .name = prefix + "example"
+      .name = "prefix/examplepath/example"
     }, splat_out {
       .start = rodata_offset,
       .vram = 0,
       .type = ".rodata",
-      .name = prefix + "example"
+      .name = "prefix/examplepath/example"
     }, splat_out {
       .start = rodata_offset + rodata_size,
-      .vram = 0,
+      .vram = rodata_size,
       .type = "bin",
       .name = std::format("bin_0x{:x}", rodata_offset + rodata_size)
     },
@@ -363,7 +372,10 @@ TEST_CASE("matcher duplicate sections", "[matcher]") {
 
   auto start_bin_data = load(start_bin);
 
-  auto prefix = std::string{"some/path/"};
+  auto paths = std::vector{file_path {
+    .file {"example.o"},
+    .path {"examplepath"}
+  }};
 
   std::vector<splat_out> yaml {
     splat_out {
@@ -379,7 +391,7 @@ TEST_CASE("matcher duplicate sections", "[matcher]") {
     }
   };
 
-  auto result = matcher(yaml, start_bin_data, archive_file_descriptor, prefix);
+  auto result = matcher(yaml, start_bin_data, archive_file_descriptor, paths, "prefix");
 
   close(start_descriptor);
   close(archive_file_descriptor);

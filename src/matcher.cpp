@@ -49,7 +49,7 @@ auto load(const std::filesystem::path &path) -> std::vector<char> {
   return file_data;
 }
 
-auto matcher(const std::vector<splat_out> &yaml, const std::vector<char> &rom, int archive_file_descriptor, std::string prefix) -> std::vector<splat_out> {
+auto matcher(const std::vector<splat_out> &yaml, const std::vector<char> &rom, int archive_file_descriptor, std::vector<file_path> paths, std::string prefix) -> std::vector<splat_out> {
   if(elf_version(EV_CURRENT) == EV_NONE) std::print("version out of date");
 
   auto sec_patterns = no_dup_archive_to_section_patterns(archive_file_descriptor);
@@ -90,7 +90,8 @@ auto matcher(const std::vector<splat_out> &yaml, const std::vector<char> &rom, i
       return a.pattern.crc_all == b.pattern.crc_all;
     })
     | std::views::filter(([](auto r) { return std::ranges::size(r) == 1; }) )
-    | std::views::join;
+    | std::views::join
+    | std::ranges::to<std::vector>();
 
   std::vector<splat_out> output{};
   for(auto i = 0; i < yaml.size(); i+=1) {
@@ -109,11 +110,23 @@ auto matcher(const std::vector<splat_out> &yaml, const std::vector<char> &rom, i
         pattern.section == ".rodata" ? ".rodata" :
         "bin"};
 
+      const auto preee = std::ranges::find_if(paths, [obj_name](const auto &x) {
+        return x.file == obj_name;
+      });
+
+      if(preee == paths.end()) {
+        std::println("{} path not found!", obj_name.c_str());
+        auto copy = entry;
+        output.push_back(copy);
+        continue;
+      }
+      const auto &mypth = *preee;
+
       output.push_back(splat_out{
         .start = entry.start,
         .vram = entry.vram,
         .type = type,
-        .name = prefix + std::string{obj_name.stem()}
+        .name = prefix + mypth.path + "/" + std::string{obj_name.stem()}
       });
 
       if(i+1 < yaml.size()) {
@@ -121,7 +134,7 @@ auto matcher(const std::vector<splat_out> &yaml, const std::vector<char> &rom, i
         if(next_entry.start > entry.start + pattern.size) {
           output.push_back(splat_out{
             .start = entry.start + pattern.size,
-            .vram = entry.vram,
+            .vram = entry.vram + pattern.size,
             .type = "bin",
             .name = std::format("bin_0x{:x}", entry.start + pattern.size)
           });
@@ -131,7 +144,7 @@ auto matcher(const std::vector<splat_out> &yaml, const std::vector<char> &rom, i
         }
       } else output.push_back(splat_out{
         .start = entry.start + pattern.size,
-        .vram = entry.vram,
+        .vram = entry.vram + pattern.size,
         .type = "bin",
         .name = std::format("bin_0x{:x}", entry.start + pattern.size)
       });
@@ -272,14 +285,10 @@ auto no_dup_archive_to_section_patterns(int archive_file_descriptor) -> std::vec
       return a.crc_all == b.crc_all;
     })
     | std::views::filter(([](auto r) { return std::ranges::size(r) == 1; }) )
-    | std::views::join;
+    | std::views::join
+    | std::ranges::to<std::vector>();
 
-  std::vector<section_pattern> output{};
-  for(const auto &entry : patterns_unique_only) {
-    output.push_back((entry));
-  }
-
-  return output;
+  return patterns_unique_only;
 }
 
 auto archive_to_section_patterns(int archive_file_descriptor) -> std::vector<section_pattern> {

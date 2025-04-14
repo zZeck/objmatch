@@ -67,6 +67,8 @@ src/matcher_main.cpp
 src/matcher.cpp
 src/splat_out.cpp
 src/section_pattern.cpp
+src/file_path_yaml.cpp
+src/files_to_mapping.cpp
 )
 
 add_executable(
@@ -93,10 +95,14 @@ find_package(Catch2 3 REQUIRED)
 # These tests can use the Catch2-provided main
 add_executable(sig_yaml_tests src/yaml_test.cpp src/signature.cpp src/section_pattern.cpp)
 add_executable(matcher_tests src/matcher_test.cpp src/matcher.cpp src/splat_out.cpp src/signature.cpp src/section_pattern.cpp)
+add_executable(file_mapping_tests src/file_mapping_test.cpp src/files_to_mapping.cpp)
 target_link_libraries(sig_yaml_tests PRIVATE Catch2::Catch2WithMain ryml::ryml)
 target_link_libraries(matcher_tests PRIVATE PkgConfig::LIBELF Catch2::Catch2WithMain ryml::ryml Crc32c::crc32c)
+target_link_libraries(file_mapping_tests PRIVATE Catch2::Catch2WithMain)
+
 
 include(CTest)
 include(Catch)
 catch_discover_tests(sig_yaml_tests)
 catch_discover_tests(matcher_tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+catch_discover_tests(file_mapping_tests WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

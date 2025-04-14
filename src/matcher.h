@@ -21,6 +21,7 @@
 #include "signature.h"
 #include "splat_out.h"
 #include "section_pattern.h"
+#include "file_path.h"
 
 using section_relocations = struct {
   Elf_Scn *section;
@@ -48,5 +49,5 @@ auto archive_to_section_patterns(int archive_file_descriptor) -> std::vector<sec
 auto no_dup_archive_to_section_patterns(int archive_file_descriptor) -> std::vector<section_pattern>;
 auto section_compare(const section_pattern &pattern, std::span<const uint8_t> data) -> bool;
 auto load(const std::filesystem::path &path) -> std::vector<char>;
-auto matcher(const std::vector<splat_out> &splat, const std::vector<char> &rom, int archive_file_descriptor, std::string prefix) -> std::vector<splat_out>;
+auto matcher(const std::vector<splat_out> &splat, const std::vector<char> &rom, int archive_file_descriptor, std::vector<file_path> paths, std::string prefix) -> std::vector<splat_out>;
 auto analyze(int archive_file_descriptor) -> void;
